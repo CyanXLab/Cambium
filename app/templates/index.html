@@ -1,0 +1,2143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <title>Cambium · {{ model_name }}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/logo.svg" />
+
+  <!-- Fonts: 国内 CDN 加速 -->
+  <link rel="preconnect" href="https://fonts.font.im" />
+  <link href="https://fonts.font.im/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- highlight.js (国内 CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+
+  <!-- marked.js (国内 CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
+
+  <!-- KaTeX (国内 CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.10/katex.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.10/katex.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.10/contrib/auto-render.min.js" defer></script>
+
+  <!-- DOMPurify for safe HTML -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.11/purify.min.js" defer></script>
+
+  <link rel="stylesheet" href="/static/css/style.css?v=20260726v98" />
+</head>
+<body>
+  <div class="app right-collapsed" id="app">
+    <!-- Sidebar backdrop (mobile) -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- ===== Sidebar (matches real ChatGPT) ===== -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Sidebar header: search + new chat + collapse (collapse on right) -->
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnSearch" title="搜索对话">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+        <button class="sidebar-iconbtn" id="btnNewChatIcon" title="新建对话">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+          </svg>
+        </button>
+        <button class="sidebar-iconbtn" id="btnToggleSidebar" title="收起侧边栏" style="margin-left:auto">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- New chat button (full width, with text) -->
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnNewChat" title="新建对话 (Ctrl+K)">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"></path>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+          </svg>
+          <span>新对话</span>
+        </button>
+        <button class="sidebar-inbox-btn" id="btnInboxCapture" title="快速捕获到 Inbox (Ctrl+J)">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+          </svg>
+          <span>捕获到 Inbox</span>
+          <span class="inbox-badge" id="inboxBadge" style="display:none">0</span>
+        </button>
+      </div>
+
+      <!-- Nav menu -->
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-view="today">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <span>今天</span>
+        </a>
+        <a class="nav-item" data-view="chat">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>聊天</span>
+        </a>
+        <a class="nav-item" data-view="library">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>资料库 (RAG)</span>
+        </a>
+        <a class="nav-item" data-view="inbox">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+          </svg>
+          <span>Inbox</span>
+        </a>
+        <a class="nav-item" data-view="journal">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+          </svg>
+          <span>日志</span>
+        </a>
+        <a class="nav-item" data-view="residents">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span>居民</span>
+        </a>
+        <a class="nav-item" data-view="artifacts">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="9" y1="13" x2="15" y2="13"></line>
+            <line x1="9" y1="17" x2="13" y2="17"></line>
+          </svg>
+          <span>作品</span>
+        </a>
+        <a class="nav-item" data-view="philosophy">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
+          </svg>
+          <span>原则</span>
+        </a>
+        <a class="nav-item" data-view="skills">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          <span>技能</span>
+        </a>
+        <a class="nav-item" data-view="sessions">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>后台会话</span>
+        </a>
+        <a class="nav-item" data-view="cron">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>定时任务</span>
+        </a>
+        <a class="nav-item" data-view="memory" id="navMemory">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a9 9 0 0 0-9 9c0 3.5 2 6.5 5 8v3h8v-3c3-1.5 5-4.5 5-8a9 9 0 0 0-9-9z"></path>
+            <line x1="9" y1="22" x2="15" y2="22"></line>
+          </svg>
+          <span>记忆</span>
+        </a>
+        <a class="nav-item" data-view="dashboard">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>记忆仪表盘</span>
+        </a>
+      </nav>
+
+      <!-- History list -->
+      <div class="sidebar-history" id="historyList">
+        <div class="history-empty">暂无历史对话</div>
+      </div>
+
+      <!-- Footer -->
+      <div class="sidebar-footer">
+        <button class="sidebar-upgrade" id="btnAbout" title="关于 Cambium">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <span>关于 Cambium</span>
+        </button>
+        <button class="sidebar-user" id="btnUserMenu" title="用户菜单">
+          <span class="avatar">Z</span>
+          <span class="user-name">zjq0107qiyun</span>
+          <span class="user-plan">免费版</span>
+          <svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ===== Main ===== -->
+    <main class="main" id="main">
+      <header class="topbar">
+        <button class="topbar-iconbtn mobile-only" id="btnMobileSidebar" title="菜单">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <button class="topbar-iconbtn desktop-only" id="btnExpandSidebar" title="展开侧边栏" style="display:none">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+        </button>
+        <div class="topbar-model" id="modelSelector">
+          <span class="model-name" id="modelName">{{ model_name }}</span>
+          <svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          <div class="model-dropdown" id="modelDropdown">
+            <!-- populated dynamically -->
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <button class="topbar-btn icon-only" id="btnTemporary" title="临时对话（不记入历史，不使用记忆）">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </button>
+          <button class="topbar-btn icon-only right-toggle" id="btnRightPanel" title="问题索引">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+            <span class="badge" id="rightPanelBadge" style="display:none">0</span>
+          </button>
+          <button class="topbar-btn" id="btnShare" title="分享">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+              <polyline points="16 6 12 2 8 6"></polyline>
+              <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+            <span>分享</span>
+          </button>
+          <button class="topbar-btn icon-only" id="btnMore" title="更多">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="1"></circle>
+              <circle cx="19" cy="12" r="1"></circle>
+              <circle cx="5" cy="12" r="1"></circle>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Conversation scroll area -->
+      <section class="conversation" id="conversation">
+        <div class="conversation-inner" id="conversationInner">
+          <!-- AI Greeting (shown when empty) — Cambium speaks first -->
+          <div class="welcome" id="welcome">
+            <div class="ai-greeting-block" id="aiGreetingBlock" style="display:none;">
+              <div class="ai-greeting-avatar">C</div>
+              <div class="ai-greeting-text" id="aiGreetingText">你好。我是 Cambium。</div>
+              <div class="ai-greeting-hint" id="aiGreetingHint">↑ 这是 Cambium 主动对你说的。它认识你。</div>
+            </div>
+            <div class="welcome-greeting" id="welcomeGreeting">今天能帮你做些什么？</div>
+            <div class="welcome-suggestions">
+              <button class="suggest-card" data-prompt="用通俗的语言解释量子纠缠，举一个生活中的比喻。">
+                <div class="suggest-title">用比喻解释概念</div>
+                <div class="suggest-desc">量子纠缠是什么？</div>
+              </button>
+              <button class="suggest-card" data-prompt="写一首关于秋天夜晚的现代诗，四节，每节四行。">
+                <div class="suggest-title">创作一首诗</div>
+                <div class="suggest-desc">关于秋天夜晚的现代诗</div>
+              </button>
+              <button class="suggest-card" data-prompt="用 Python 写一个快速排序的实现，并讲解时间复杂度。">
+                <div class="suggest-title">写代码示例</div>
+                <div class="suggest-desc">Python 快速排序实现</div>
+              </button>
+              <button class="suggest-card" data-prompt="帮我制定一份为期 4 周的跑步训练计划，目标是 5 公里。">
+                <div class="suggest-title">制定计划</div>
+                <div class="suggest-desc">5 公里跑步训练</div>
+              </button>
+            </div>
+            <!-- Quick discovery cards for new users -->
+            <div class="welcome-discovery" id="welcomeDiscovery">
+              <div class="welcome-discovery-title">✨ Cambium 不只是聊天</div>
+              <div class="welcome-discovery-cards">
+                <a class="discovery-card" data-view="today">
+                  <div class="discovery-card-icon">🌅</div>
+                  <div class="discovery-card-title">今天</div>
+                  <div class="discovery-card-desc">AI 每天给你写一封信</div>
+                </a>
+                <a class="discovery-card" data-view="residents">
+                  <div class="discovery-card-icon">👥</div>
+                  <div class="discovery-card-title">居民</div>
+                  <div class="discovery-card-desc">7 个 AI 居民住在这里</div>
+                </a>
+                <a class="discovery-card" data-view="philosophy">
+                  <div class="discovery-card-icon">📜</div>
+                  <div class="discovery-card-title">原则</div>
+                  <div class="discovery-card-desc">AI 会引用你的原则</div>
+                </a>
+                <a class="discovery-card" data-view="artifacts">
+                  <div class="discovery-card-icon">📂</div>
+                  <div class="discovery-card-title">作品</div>
+                  <div class="discovery-card-desc">共同创造的东西</div>
+                </a>
+              </div>
+            </div>
+          </div>
+          <!-- messages injected here -->
+        </div>
+      </section>
+
+      <!-- Scroll-to-bottom button -->
+      <button class="scroll-btn" id="btnScrollDown" title="回到底部">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+
+      <!-- Composer -->
+      <footer class="composer" id="composer">
+        <div class="composer-inner">
+          <div class="composer-attachments" id="composerAttachments"></div>
+          <div class="composer-box" id="composerBox">
+            <button class="composer-tool" id="btnAttach" title="添加附件">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
+            <input type="file" id="fileInput" multiple style="display:none" />
+            <textarea
+              id="composerInput"
+              class="composer-input"
+              placeholder="有问题，尽管问"
+              rows="1"
+              autocomplete="off"
+            ></textarea>
+            <div class="composer-tools-right">
+              <button class="composer-tool" id="btnThink" title="深度思考">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+              </button>
+              <button class="composer-tool" id="btnMic" title="语音输入">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+              <button class="composer-send" id="btnSend" title="发送" disabled>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5"></line>
+                  <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+              </button>
+              <button class="composer-stop" id="btnStop" title="停止生成" style="display:none">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="composer-hint">
+            Cambium 可能会犯错，请核查重要信息。
+            <span class="composer-counter" id="composerCounter"></span>
+          </div>
+        </div>
+      </footer>
+    </main>
+
+    <!-- ===== Right panel: chat index (GPT-style) ===== -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="right-panel-header">
+        <span>问题索引</span>
+        <button class="right-panel-close" id="btnCloseRightPanel" title="收起">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="right-panel-list" id="rightPanelList">
+        <div class="right-panel-empty">当前对话没有用户问题。<br>发送一条消息后，这里会显示问题列表，方便快速跳转。</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===== Library (RAG) view ===== -->
+  <div class="app" id="libraryView" style="display:none">
+    <aside class="sidebar" id="sidebarLib">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnLibBack" title="返回聊天">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">资料库</div>
+      </div>
+      <div class="sidebar-section"><div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">上传的文件会被向量化并用于对话检索</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">资料库 (RAG)</span></div>
+      </header>
+      <div class="rag-view">
+        <div class="rag-view-inner">
+          <div class="rag-view-header">
+            <h2>知识库文件</h2>
+          </div>
+          <div class="rag-view-desc">上传 PDF / Markdown / 文本 / 代码文件，AI 在回答时会自动检索相关片段并参考。所有文件保存在本地，不会上传到第三方。</div>
+          <div class="rag-upload-zone" id="ragUploadZone">
+            <div class="rag-upload-icon">📄</div>
+            <div class="rag-upload-text">点击或拖拽文件上传</div>
+            <div class="rag-upload-hint">支持 .txt / .md / .pdf / .py / .js / .json / .csv 等，最大 20MB</div>
+          </div>
+          <input type="file" id="ragFileInput" multiple style="display:none" />
+          <div class="rag-files-list" id="ragFilesList">
+            <div class="rag-empty">还没有上传文件</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Skills view ===== -->
+  <div class="app" id="skillsView" style="display:none">
+    <aside class="sidebar" id="sidebarSkills">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnSkillsBack" title="返回聊天">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">技能</div>
+      </div>
+      <div class="sidebar-section"><div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">技能 = SKILL.md 文件，兼容 Claude Code 约定</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">技能</span></div>
+      </header>
+      <div class="rag-view">
+        <div class="rag-view-inner skills-view-inner">
+          <div class="rag-view-header">
+            <h2>已安装技能</h2>
+            <button class="ghost-btn" id="btnInstallSkill">+ 新建技能</button>
+          </div>
+          <div class="rag-view-desc">技能是 Markdown 指令文件 (SKILL.md)，包含触发条件和详细说明。AI 会在合适时机自动调用。兼容 Claude Code 技能目录格式（<code>.skills/&lt;name&gt;/SKILL.md</code>）。</div>
+          <div class="skills-list" id="skillsList">
+            <div class="rag-empty">还没有技能</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Sessions view (background sessions) ===== -->
+  <div class="app" id="sessionsView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnSessionsBack" title="返回聊天">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">后台会话</div>
+      </div>
+      <div class="sidebar-section"><div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">AI 可以同时运行多个会话处理不同任务，互不干扰</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">后台会话</span></div>
+      </header>
+      <div class="rag-view">
+        <div class="rag-view-inner">
+          <div class="rag-view-header">
+            <h2>后台会话</h2>
+            <button class="ghost-btn" id="btnSessionSpawn">+ 启动新会话</button>
+          </div>
+          <div class="rag-view-desc">后台会话独立于主对话运行，可用于并行处理多个任务（如一个研究旅行计划、一个写代码）。AI 也可以通过 sessions_spawn 工具自主启动子会话。</div>
+          <div class="skills-list" id="sessionsList">
+            <div class="rag-empty">还没有后台会话</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Cron view (scheduled tasks) ===== -->
+  <div class="app" id="cronView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnCronBack" title="返回聊天">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">定时任务</div>
+      </div>
+      <div class="sidebar-section"><div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">cron 表达式 + 自然语言 prompt，到点自动 spawn 一个会话执行</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">定时任务</span></div>
+      </header>
+      <div class="rag-view">
+        <div class="rag-view-inner">
+          <div class="rag-view-header">
+            <h2>定时任务</h2>
+            <button class="ghost-btn" id="btnCronCreate">+ 新建任务</button>
+          </div>
+          <div class="rag-view-desc">支持标准 5 字段 cron 表达式（分 时 日 月 周）。例如 <code>47 6 * * *</code> = 每天 6:47。任务到点会自动启动一个 AI 会话处理 prompt，结果可在后台会话页面查看。</div>
+          <div class="skills-list" id="cronJobsList">
+            <div class="rag-empty">还没有定时任务</div>
+          </div>
+          <div class="rag-view-header" style="margin-top:32px;">
+            <h2>执行历史</h2>
+          </div>
+          <div class="skills-list" id="cronRunsList">
+            <div class="rag-empty">还没有执行记录</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Today view (life-first homepage) ===== -->
+  <div class="app today-app" id="todayView" style="display:none">
+    <main class="today-main">
+      <div class="today-scroll">
+        <!-- Greeting -->
+        <header class="today-header">
+          <div class="today-greeting" id="todayGreeting">早上好</div>
+          <div class="today-date" id="todayDate"></div>
+        </header>
+
+        <!-- AI Morning Letter — the centerpiece -->
+        <section class="today-morning-letter" id="morningLetterSection">
+          <div class="morning-letter-header">
+            <div class="morning-letter-from">
+              <span class="morning-letter-avatar">C</span>
+              <div>
+                <div class="morning-letter-name">Cambium</div>
+                <div class="morning-letter-meta" id="morningLetterMeta">今天的信</div>
+              </div>
+            </div>
+            <button class="today-btn" id="btnGenerateMorning" title="让 AI 重新写今天的信">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>生成</span>
+            </button>
+          </div>
+          <div class="morning-letter-body" id="morningLetterBody">
+            <div class="today-empty">今天还没有信。点击"生成"让 Cambium 给你写一封。</div>
+          </div>
+          <div class="morning-letter-concerns" id="morningConcerns" style="display:none">
+            <div class="morning-concerns-label">我在想的事</div>
+            <div id="morningConcernsList"></div>
+          </div>
+        </section>
+
+        <!-- Discoveries — what AI noticed -->
+        <section class="today-discoveries" id="todayDiscoveries" style="display:none">
+          <div class="today-discoveries-head">
+            <h3>我昨夜的发现</h3>
+            <span class="today-card-tag">Discovery</span>
+          </div>
+          <div id="todayDiscoveriesList"></div>
+        </section>
+
+        <!-- Grid of cards -->
+        <div class="today-grid">
+          <!-- Yesterday Done -->
+          <section class="today-card today-card-yesterday">
+            <div class="today-card-head">
+              <h3>昨天完成</h3>
+              <span class="today-card-count" id="yesterdayCount">0</span>
+            </div>
+            <div class="today-card-body" id="yesterdayList">
+              <div class="today-empty">暂无记录</div>
+            </div>
+          </section>
+
+          <!-- AI Reflection -->
+          <section class="today-card today-card-reflection">
+            <div class="today-card-head">
+              <h3>AI 反思</h3>
+              <span class="today-card-tag">Cambium</span>
+            </div>
+            <div class="today-card-body" id="reflectionBody">
+              <div class="today-empty">还没有生成反思。Life Loop 会在每天结束时自动生成。</div>
+            </div>
+          </section>
+
+          <!-- Today's Goals -->
+          <section class="today-card today-card-goals">
+            <div class="today-card-head">
+              <h3>今天的目标</h3>
+              <span class="today-card-count" id="todayGoalsCount">0</span>
+            </div>
+            <div class="today-card-body" id="todayGoalsList">
+              <div class="today-empty">暂无目标。在 Inbox 添加 todo，或让 AI 帮你规划。</div>
+            </div>
+          </section>
+
+          <!-- Journal Preview -->
+          <section class="today-card today-card-journal">
+            <div class="today-card-head">
+              <h3>今日日志</h3>
+              <span class="today-card-tag" id="journalStreakTag" style="display:none"></span>
+            </div>
+            <div class="today-card-body" id="journalPreview">
+              <div class="today-empty">今天还没有写日志。</div>
+              <div class="today-journal-actions">
+                <button class="today-btn primary" id="btnJournalAiDraft">让 AI 起草</button>
+                <button class="today-btn" id="btnJournalEdit">写日志</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- Inbox pending -->
+          <section class="today-card today-card-inbox">
+            <div class="today-card-head">
+              <h3>Inbox 待处理</h3>
+              <span class="today-card-count" id="inboxPendingCount">0</span>
+            </div>
+            <div class="today-card-body" id="inboxPendingList">
+              <div class="today-empty">Inbox 是空的。捕获任何想法、链接、待办，让 Life Loop 帮你归类。</div>
+            </div>
+            <div class="today-card-foot">
+              <button class="today-btn primary" id="btnTodayCapture">+ 捕获</button>
+              <button class="today-btn" id="btnTodayInbox">查看全部</button>
+            </div>
+          </section>
+
+          <!-- Co-experience moment -->
+          <section class="today-card today-card-coexp">
+            <div class="today-card-head">
+              <h3>来自我们共同经历的回忆</h3>
+              <span class="today-card-tag">Co-experience</span>
+            </div>
+            <div class="today-card-body" id="coExpBody">
+              <div class="today-empty">还没有共同回忆。重要的时刻会被自动收集到这里。</div>
+            </div>
+          </section>
+
+          <!-- Recent Activity -->
+          <section class="today-card today-card-activity">
+            <div class="today-card-head">
+              <h3>最近活动</h3>
+            </div>
+            <div class="today-card-body" id="recentActivityList">
+              <div class="today-empty">暂无活动</div>
+            </div>
+          </section>
+
+          <!-- Chat shortcut -->
+          <section class="today-card today-card-chat">
+            <div class="today-card-head">
+              <h3>聊天</h3>
+            </div>
+            <div class="today-card-body">
+              <div class="today-chat-text">想聊点什么？聊天只是 Cambium 的一个模块。当你需要直接对话时，从这里开始。</div>
+              <button class="today-btn primary big" id="btnTodayChat">开始聊天</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Inbox view ===== -->
+  <div class="app inbox-app" id="inboxView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnInboxBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">Inbox</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">
+          任何东西先进 Inbox。Life Loop 会自动归类到日志 / 记忆 / 目标 / 任务 / 研究。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnInboxNew" title="新建捕获">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>新建捕获</span>
+        </button>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-inbox-filter="all"><span>全部</span></a>
+        <a class="nav-item" data-inbox-filter="pending"><span>待处理</span></a>
+        <a class="nav-item" data-inbox-filter="processed"><span>已处理</span></a>
+        <a class="nav-item" data-inbox-filter="archived"><span>已归档</span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">Inbox · 万物入口</span></div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" id="btnInboxRefresh" title="刷新">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            <span>刷新</span>
+          </button>
+        </div>
+      </header>
+      <div class="inbox-view">
+        <div class="inbox-view-inner" id="inboxListContainer">
+          <div class="inbox-empty">Inbox 是空的。点击 "新建捕获" 添加任何东西。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Journal view ===== -->
+  <div class="app journal-app" id="journalView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnJournalBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">日志</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">
+          每天一篇。AI 在 day end 自动起草，你随时编辑。日志是 Cambium 与你"共同经历"的脊柱。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnJournalToday" title="今日日志">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          <span>今日日志</span>
+        </button>
+      </div>
+      <div class="sidebar-history" id="journalHistoryList">
+        <div class="history-empty">暂无历史日志</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name" id="journalTitle">日志 · 今日</span></div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" id="btnJournalAiDraftFull" title="AI 起草今日日志">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+              <path d="M2 17l10 5 10-5"></path>
+              <path d="M2 12l10 5 10-5"></path>
+            </svg>
+            <span>AI 起草</span>
+          </button>
+          <button class="topbar-btn" id="btnJournalSave" title="保存">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            </svg>
+            <span>保存</span>
+          </button>
+        </div>
+      </header>
+      <div class="journal-view">
+        <div class="journal-view-inner">
+          <div class="journal-meta">
+            <div class="journal-tone" id="journalTone" style="display:none"></div>
+            <div class="journal-streak-info" id="journalStreakInfo"></div>
+          </div>
+          <div class="journal-ai-draft" id="journalAiDraft" style="display:none">
+            <div class="journal-ai-draft-label">AI 草稿（可编辑/采纳）</div>
+            <div class="journal-ai-draft-text" id="journalAiDraftText"></div>
+            <div class="journal-ai-actions">
+              <button class="today-btn primary" id="btnJournalAdoptDraft">采纳为正文</button>
+              <button class="today-btn" id="btnJournalDiscardDraft">丢弃草稿</button>
+            </div>
+          </div>
+          <textarea class="journal-editor" id="journalEditor" placeholder="今天发生了什么？想写什么就写什么。AI 会帮你补全、提炼情绪和亮点。"></textarea>
+          <div class="journal-extras">
+            <div class="journal-extra-row">
+              <label>亮点</label>
+              <input type="text" id="journalHighlights" placeholder="用 / 分隔多个亮点" />
+            </div>
+            <div class="journal-extra-row">
+              <label>成长</label>
+              <input type="text" id="journalGrowth" placeholder="今天学到了什么？" />
+            </div>
+            <div class="journal-extra-row">
+              <label>失败</label>
+              <input type="text" id="journalFailures" placeholder="什么没做成？" />
+            </div>
+            <div class="journal-extra-row">
+              <label>感恩</label>
+              <input type="text" id="journalGratitude" placeholder="今天感谢什么？" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Residents view ===== -->
+  <div class="app residents-app" id="residentsView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnResidentsBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">居民 (Residents)</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">
+          AI 居民住在这个世界里。他们不是工具——他们有自己的关注、个性和历史。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnResidentNew" title="创建新居民">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>创建居民</span>
+        </button>
+      </div>
+      <div class="sidebar-history" id="residentsListSidebar">
+        <div class="history-empty">加载中...</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name" id="residentTitle">居民详情</span></div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" id="btnResidentRun" title="手动运行该居民">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>运行</span>
+          </button>
+          <button class="topbar-btn" id="btnResidentEdit" title="编辑">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <span>编辑</span>
+          </button>
+        </div>
+      </header>
+      <div class="residents-view" id="residentsViewContainer">
+        <div class="residents-empty">从左侧选择一位居民，或创建新居民</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Artifacts view (the "World") ===== -->
+  <div class="app artifacts-app" id="artifactsView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnArtifactsBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">作品 (Artifacts)</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">
+          我们共同创造的东西——README、设计、论文、代码、笔记、项目。这才是值得保存的，不是消息。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnArtifactNew" title="创建新作品">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>新建作品</span>
+        </button>
+      </div>
+      <nav class="sidebar-nav" id="artifactTypeFilter">
+        <a class="nav-item active" data-artifact-type="all"><span>全部</span></a>
+        <a class="nav-item" data-artifact-type="readme"><span>README</span></a>
+        <a class="nav-item" data-artifact-type="design"><span>设计</span></a>
+        <a class="nav-item" data-artifact-type="code"><span>代码</span></a>
+        <a class="nav-item" data-artifact-type="note"><span>笔记</span></a>
+        <a class="nav-item" data-artifact-type="plan"><span>计划</span></a>
+        <a class="nav-item" data-artifact-type="research"><span>研究</span></a>
+        <a class="nav-item" data-artifact-type="essay"><span>文章</span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name" id="artifactTitle">作品详情</span></div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" id="btnArtifactNewVersion" title="创建新版本">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+            <span>新版本</span>
+          </button>
+          <button class="topbar-btn" id="btnArtifactSave" title="保存">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            </svg>
+            <span>保存</span>
+          </button>
+        </div>
+      </header>
+      <div class="artifacts-view" id="artifactsViewContainer">
+        <div class="artifacts-empty">从左侧选择一个作品，或新建</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Philosophy view ===== -->
+  <div class="app philosophy-app" id="philosophyView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnPhilosophyBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">原则 (Philosophy)</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">
+          我们共同认定的价值观、信念、原则、反目标。AI 在对话中会引用它们——并挑战违反它们的发言。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnPhilosophyNew" title="新增原则">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>新增</span>
+        </button>
+      </div>
+      <nav class="sidebar-nav" id="philosophyTypeFilter">
+        <a class="nav-item active" data-phil-type="all"><span>全部</span></a>
+        <a class="nav-item" data-phil-type="value"><span>价值观</span></a>
+        <a class="nav-item" data-phil-type="belief"><span>信念</span></a>
+        <a class="nav-item" data-phil-type="principle"><span>原则</span></a>
+        <a class="nav-item" data-phil-type="anti_goal"><span>反目标</span></a>
+      </nav>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">我们的哲学</span></div>
+      </header>
+      <div class="philosophy-view" id="philosophyViewContainer">
+        <div class="philosophy-empty">加载中...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Memory Dashboard view ===== -->
+  <div class="app" id="dashboardView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnDashboardBack" title="返回聊天">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px; font-weight:600; padding-left:8px;">记忆仪表盘</div>
+      </div>
+      <div class="sidebar-section"><div style="padding:8px 12px; color:var(--text-muted); font-size:12px;">分层记忆 + 知识图谱 + 事件 + 反思 + 元认知</div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">记忆仪表盘</span></div>
+        <div class="topbar-actions">
+          <button class="ghost-btn" id="btnTriggerReflection" style="font-size:13px;">触发反思</button>
+          <button class="ghost-btn" id="btnRefreshDashboard" style="font-size:13px;">刷新</button>
+        </div>
+      </header>
+      <div class="rag-view">
+        <div class="rag-view-inner">
+          <!-- Stats overview -->
+          <div id="dashboardStats" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; margin-bottom:24px;"></div>
+
+          <!-- Layered Memory -->
+          <div class="rag-view-header"><h2>分层记忆</h2>
+            <select id="dashboardMemoryFilter" class="select-input" style="max-width:200px;">
+              <option value="">全部层级</option>
+              <option value="permanent">永久</option>
+              <option value="long_term">长期</option>
+              <option value="short_term">短期</option>
+            </select>
+          </div>
+          <div class="rag-view-desc">工作记忆（当前对话）→ 短期（24h）→ 长期（重要事实）→ 永久（身份核心）。重要度评分决定层级，衰减机制让低价值记忆自然遗忘。</div>
+          <div class="skills-list" id="dashboardMemories"><div class="rag-empty">加载中...</div></div>
+
+          <!-- Knowledge Graph -->
+          <div class="rag-view-header" style="margin-top:32px;"><h2>知识图谱</h2></div>
+          <div class="rag-view-desc">实体-关系-实体三元组。从对话中自动提取，支持图检索（"用户喜欢什么创造游戏"→遍历图谱）。</div>
+          <div class="skills-list" id="dashboardKG"><div class="rag-empty">加载中...</div></div>
+
+          <!-- Episodic Memory -->
+          <div class="rag-view-header" style="margin-top:32px;"><h2>事件记忆</h2></div>
+          <div class="rag-view-desc">带时空上下文的事件（如"高考出分 500分"）。支持因果链检索（"后来怎么样了"→遍历事件链）。</div>
+          <div class="skills-list" id="dashboardEpisodes"><div class="rag-empty">加载中...</div></div>
+
+          <!-- Reflections -->
+          <div class="rag-view-header" style="margin-top:32px;"><h2>反思记录</h2></div>
+          <div class="rag-view-desc">AI 周期性整体反思：识别趋势、更新画像、提取新长期记忆。不是逐条总结，而是整体理解。</div>
+          <div class="skills-list" id="dashboardReflections"><div class="rag-empty">加载中...</div></div>
+
+          <!-- Meta-cognition -->
+          <div class="rag-view-header" style="margin-top:32px;"><h2>元认知自检</h2></div>
+          <div class="rag-view-desc">每次回复后的自我检查：信心度、是否有矛盾、是否需要澄清/搜索。低信心时自动记录。</div>
+          <div class="skills-list" id="dashboardMetaCog"><div class="rag-empty">加载中...</div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ===== Onboarding Modal (first-run welcome) ===== -->
+  <div class="modal-overlay" id="onboardingModal" style="display:none">
+    <div class="modal onboarding-modal">
+      <div class="onboarding-content" id="onboardingContent">
+        <!-- Slides injected by JS -->
+      </div>
+      <div class="onboarding-nav">
+        <button class="today-btn" id="btnOnboardingSkip">跳过</button>
+        <button class="today-btn primary" id="btnOnboardingNext">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Settings Modal (ChatGPT-style: left nav + right panel) ===== -->
+  <div class="modal-overlay" id="settingsModal" style="display:none">
+    <div class="modal settings-modal">
+      <div class="settings-layout">
+        <!-- Left nav -->
+        <aside class="settings-nav">
+          <div class="settings-nav-header">
+            <h2>设置</h2>
+            <button class="modal-close" id="btnCloseSettings">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <nav class="settings-nav-list">
+            <button class="settings-nav-item active" data-tab="general">通用</button>
+            <button class="settings-nav-item" data-tab="api">API 配置</button>
+            <button class="settings-nav-item" data-tab="models">模型分工</button>
+            <button class="settings-nav-item" data-tab="backup">备用 API</button>
+            <button class="settings-nav-item" data-tab="personalization">个性化</button>
+            <button class="settings-nav-item" data-tab="appearance">外观</button>
+            <button class="settings-nav-item" data-tab="model">模型参数</button>
+            <button class="settings-nav-item" data-tab="thinking">深度思考</button>
+            <button class="settings-nav-item" data-tab="memory">记忆</button>
+            <button class="settings-nav-item" data-tab="advanced">对话增强</button>
+            <button class="settings-nav-item" data-tab="rag">RAG 资料库</button>
+            <button class="settings-nav-item" data-tab="mcp">MCP 服务器</button>
+            <button class="settings-nav-item" data-tab="skills">技能</button>
+            <button class="settings-nav-item" data-tab="sessions">多会话</button>
+            <button class="settings-nav-item" data-tab="cron">定时任务</button>
+            <button class="settings-nav-item" data-tab="data">数据</button>
+            <button class="settings-nav-item" data-tab="prompts">Prompt 工程</button>
+            <button class="settings-nav-item" data-tab="debug" id="debugTabBtn" style="display:none;">🔧 Debug</button>
+          </nav>
+        </aside>
+        <!-- Right panel -->
+        <section class="settings-panel" id="settingsPanel">
+
+          <div class="settings-tab" data-tab="general">
+            <h3 class="settings-tab-title">通用</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">用户昵称</div>
+                <div class="settings-desc">让 AI 知道怎么称呼你，也会用于欢迎语</div>
+              </div>
+              <input type="text" id="settingUserName" class="text-input" placeholder="例如：小明" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">系统提示词</div>
+                <div class="settings-desc">为每次对话设定角色与约束</div>
+              </div>
+              <textarea id="settingSystem" class="settings-textarea" rows="3" placeholder="例如：你是一个擅长编程的助手，回答简洁、可执行。"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">语言</div>
+                <div class="settings-desc">界面语言（自动检测浏览器语言）</div>
+              </div>
+              <select id="settingLanguage" class="select-input">
+                <option value="auto">自动</option>
+                <option value="zh-CN">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="api" style="display:none">
+            <h3 class="settings-tab-title">API 配置</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 密钥</div>
+                <div class="settings-desc">ModelScope / OpenAI 兼容 API 的密钥。留空则使用 .env 中的默认值。</div>
+              </div>
+              <input type="password" id="settingApiKey" class="text-input" placeholder="ms-..." />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 地址</div>
+                <div class="settings-desc">API 基础 URL，如 https://api-inference.modelscope.cn/v1</div>
+              </div>
+              <input type="text" id="settingApiBaseUrl" class="text-input" placeholder="https://api-inference.modelscope.cn/v1" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 限速延迟（秒）</div>
+                <div class="settings-desc">每次请求前的等待时间，避免触发 API 限流。0=不延迟。</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="10" step="0.5" id="settingApiDelay" class="range" />
+                <span class="range-value" id="settingApiDelayValue">1</span>
+              </div>
+            </div>
+
+            <h3 class="settings-tab-title" style="margin-top:24px">模型管理</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型 1</div>
+                <div class="settings-desc">留空则不在下拉菜单中显示</div>
+              </div>
+              <input type="text" id="settingModelSlot1" class="text-input" placeholder="Qwen/Qwen3.5-397B-A17B" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型 2</div>
+                <div class="settings-desc">留空则不在下拉菜单中显示</div>
+              </div>
+              <input type="text" id="settingModelSlot2" class="text-input" placeholder="Qwen/Qwen3.5-122B-A10B" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型 3</div>
+                <div class="settings-desc">留空则不在下拉菜单中显示</div>
+              </div>
+              <input type="text" id="settingModelSlot3" class="text-input" placeholder="" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型 4</div>
+                <div class="settings-desc">留空则不在下拉菜单中显示</div>
+              </div>
+              <input type="text" id="settingModelSlot4" class="text-input" placeholder="" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型 5</div>
+                <div class="settings-desc">留空则不在下拉菜单中显示</div>
+              </div>
+              <input type="text" id="settingModelSlot5" class="text-input" placeholder="" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">测试连接</div>
+                <div class="settings-desc">用当前选中的模型发送一个测试请求，验证是否可用</div>
+              </div>
+              <button class="ghost-btn" id="btnTestApi">测试连接</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">自动获取模型列表</div>
+                <div class="settings-desc">调用 GET /v1/models 自动获取该 API 提供的所有可用模型，可选择填入下方模型槽</div>
+              </div>
+              <button class="ghost-btn" id="btnAutoFetchModels">自动获取模型</button>
+            </div>
+            <div class="settings-row" id="autoFetchResultRow" style="display:none">
+              <div class="settings-label">
+                <div class="settings-title">可用模型</div>
+                <div class="settings-desc" id="autoFetchCount"></div>
+              </div>
+              <select id="autoFetchSelect" class="select-input" style="max-width:300px;"></select>
+              <button class="ghost-btn" id="btnApplyAutoFetch" style="margin-left:8px;">填入槽 1</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="personalization" style="display:none">
+            <h3 class="settings-tab-title">个性化</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">职业</div>
+                <div class="settings-desc">你的职业或身份，帮助 AI 更精准地回答</div>
+              </div>
+              <input type="text" id="settingUserOccupation" class="text-input" placeholder="例如：高三学生 / 室内设计师 / 程序员" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">你的详情</div>
+                <div class="settings-desc">任何想让 AI 知道的额外信息（兴趣、目标、偏好等）</div>
+              </div>
+              <textarea id="settingUserDetails" class="settings-textarea" rows="3" placeholder="例如：对 AI 和机器人感兴趣，正在学习 Python，喜欢深度分析而非简单列表。"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">用户画像</div>
+                <div class="settings-desc">简要描述你的身份/兴趣（旧字段，保留兼容）</div>
+              </div>
+              <textarea id="settingUserPersona" class="settings-textarea" rows="2" placeholder="可选"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">性格风格</div>
+                <div class="settings-desc">选择 AI 回复的语气和风格，会与记忆/自定义指令协同工作</div>
+              </div>
+              <select id="settingPersonality" class="select-input">
+                <option value="default">默认 — 清晰中立，标准风格</option>
+                <option value="career">职业生涯 — 精致精准，正式专业</option>
+                <option value="friendly">友好 — 温暖健谈，平静清晰</option>
+                <option value="candid">坦率 — 直接鼓励，诚实反馈</option>
+                <option value="quirky">古怪 — 玩心想象，幽默创意</option>
+                <option value="efficient">高效 — 简洁明了，直奔主题</option>
+                <option value="cynical">愤世嫉俗 — 讽刺干瘪，机智直白</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用记忆</div>
+                <div class="settings-desc">让 AI 记住你分享过的有用信息，个性化未来的回复</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingMemory" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理记忆</div>
+                <div class="settings-desc">查看、编辑或清空所有已记忆的事实与摘要</div>
+              </div>
+              <button class="ghost-btn btn-open-memory">管理记忆</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="appearance" style="display:none">
+            <h3 class="settings-tab-title">外观</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">主题</div>
+                <div class="settings-desc">选择浅色、深色或跟随系统</div>
+              </div>
+              <select id="settingThemeAppearance" class="select-input">
+                <option value="dark">深色</option>
+                <option value="light">浅色</option>
+                <option value="system">跟随系统</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">对比度</div>
+                <div class="settings-desc">调整界面元素的对比度</div>
+              </div>
+              <select id="settingThemeContrast" class="select-input">
+                <option value="default">默认</option>
+                <option value="more">更高</option>
+                <option value="less">更低</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">点缀色</div>
+                <div class="settings-desc">用于链接、按钮高亮等元素</div>
+              </div>
+              <div class="accent-color-picker" id="accentColorPicker">
+                <button class="accent-swatch active" data-color="default" style="background:#ececec" title="默认"></button>
+                <button class="accent-swatch" data-color="blue" style="background:#3b82f6" title="蓝色"></button>
+                <button class="accent-swatch" data-color="green" style="background:#10b981" title="绿色"></button>
+                <button class="accent-swatch" data-color="purple" style="background:#8b5cf6" title="紫色"></button>
+                <button class="accent-swatch" data-color="orange" style="background:#f59e0b" title="橙色"></button>
+                <button class="accent-swatch" data-color="pink" style="background:#ec4899" title="粉色"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="model" style="display:none">
+            <h3 class="settings-tab-title">模型参数</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">温度 (temperature)</div>
+                <div class="settings-desc">0 = 严谨确定，1 = 发散创造</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="2" step="0.1" id="settingTemp" class="range" />
+                <span class="range-value" id="settingTempValue">0.7</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Top-P</div>
+                <div class="settings-desc">核采样阈值，越小越保守</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="1" step="0.05" id="settingTopP" class="range" />
+                <span class="range-value" id="settingTopPValue">0.95</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Top-K</div>
+                <div class="settings-desc">每步只从概率最高的 K 个词中选 (0=不启用)</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="100" step="1" id="settingTopK" class="range" />
+                <span class="range-value" id="settingTopKValue">0</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">最大 Tokens</div>
+                <div class="settings-desc">单次回复的最大长度</div>
+              </div>
+              <input type="number" min="256" max="32768" step="256" id="settingMaxTokens" class="number-input" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Presence Penalty</div>
+                <div class="settings-desc">正值鼓励引入新话题</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="-2" max="2" step="0.1" id="settingPresencePenalty" class="range" />
+                <span class="range-value" id="settingPresencePenaltyValue">0</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Frequency Penalty</div>
+                <div class="settings-desc">正值减少重复用词</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="-2" max="2" step="0.1" id="settingFrequencyPenalty" class="range" />
+                <span class="range-value" id="settingFrequencyPenaltyValue">0</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">停止序列</div>
+                <div class="settings-desc">用逗号分隔，遇到这些字符串就停止生成</div>
+              </div>
+              <input type="text" id="settingStop" class="text-input" placeholder="例如：###,END" />
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="thinking" style="display:none">
+            <h3 class="settings-tab-title">深度思考</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用深度思考</div>
+                <div class="settings-desc">显示模型推理过程，回答更深入但更慢</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingThinking" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">思考预算 (tokens)</div>
+                <div class="settings-desc">限制推理过程的最大长度 (0=不限制)</div>
+              </div>
+              <input type="number" min="0" max="8192" step="128" id="settingThinkingBudget" class="number-input" />
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="memory" style="display:none">
+            <h3 class="settings-tab-title">记忆</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用长期记忆</div>
+                <div class="settings-desc">让 AI 记住你的偏好和事实，越用越懂你</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingMemoryTab2" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">自动抽取记忆</div>
+                <div class="settings-desc">每轮对话后自动让 LLM 抽取值得记住的事实。默认关闭——建议保持关闭，除非你明确需要原子事实。已推荐使用摘要模式（默认开启）。</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingMemoryAuto" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">自动生成记忆摘要</div>
+                <div class="settings-desc">定期将记忆片段综合为高层摘要，类似人脑的长期记忆（推荐开启）</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingMemoryAutoSummary" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">注入记忆数量</div>
+                <div class="settings-desc">每次对话注入的相关记忆条数（0=只使用摘要）</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="15" step="1" id="settingMemoryCount" class="range" />
+                <span class="range-value" id="settingMemoryCountValue">5</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理记忆</div>
+                <div class="settings-desc">查看、编辑或清空所有已记忆的事实与摘要</div>
+              </div>
+              <button class="ghost-btn btn-open-memory">管理记忆</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="advanced" style="display:none">
+            <h3 class="settings-tab-title">对话增强</h3>
+            <div class="settings-desc" style="margin-bottom:18px;">让 CyanX AI 像朋友一样越用越懂你：自动压缩长对话、向量化历史聊天、识别情绪、构建用户画像、主动回忆过往。所有功能可独立开关。</div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">对话压缩</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用自动压缩</div>
+                <div class="settings-desc">对话超过阈值时自动把旧消息压缩为摘要，保留最近 N 条</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingCompressEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">压缩阈值（tokens）</div>
+                <div class="settings-desc">超过此值触发压缩</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="2000" max="50000" step="1000" id="settingCompressThreshold" class="range" />
+                <span class="range-value" id="settingCompressThresholdValue">8000</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">保留最近消息数</div>
+                <div class="settings-desc">压缩时保留最近 N 条消息不压缩</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="2" max="20" step="1" id="settingCompressKeepRecent" class="range" />
+                <span class="range-value" id="settingCompressKeepRecentValue">6</span>
+              </div>
+            </div>
+
+            <h4 style="margin:24px 0 8px; color:var(--text-primary); font-size:14px;">聊天向量化</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用聊天向量化</div>
+                <div class="settings-desc">把每条消息向量化存储，支持语义检索过往对话（"我上次问过什么"）。删除消息/会话时自动同步删除向量</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingChatVectorsEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">检索条数</div>
+                <div class="settings-desc">每次对话注入的相关历史片段数</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="10" step="1" id="settingChatVectorsTopK" class="range" />
+                <span class="range-value" id="settingChatVectorsTopKValue">5</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">重建向量索引</div>
+                <div class="settings-desc">把所有已有对话重新向量化（首次开启或迁移后使用）</div>
+              </div>
+              <button class="ghost-btn" id="btnRebuildChatVectors">重建索引</button>
+            </div>
+
+            <h4 style="margin:24px 0 8px; color:var(--text-primary); font-size:14px;">情感与画像</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">情感识别</div>
+                <div class="settings-desc">从用户消息识别情绪（愉悦/焦虑/愤怒/讽刺等），AI 据此调整回应</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingEmotionTracking" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">用户画像自动更新</div>
+                <div class="settings-desc">LLM 持续从对话中提取性格、兴趣、偏好、关系，构建动态用户画像</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingProfileAutoUpdate" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">主动回忆</div>
+                <div class="settings-desc">当用户提到"上次/之前/那个"时，主动检索相关记忆并自然提及</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingProactiveRecall" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">情感共鸣</div>
+                <div class="settings-desc">AI 像朋友一样共情：低落时鼓励、兴奋时同庆、讽刺时懂言外之意</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingEmotionalResonance" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">查看用户画像</div>
+                <div class="settings-desc">查看当前积累的用户画像和情绪状态</div>
+              </div>
+              <button class="ghost-btn" id="btnViewProfile">查看画像</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="rag" style="display:none">
+            <h3 class="settings-tab-title">RAG 资料库</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用 RAG 检索</div>
+                <div class="settings-desc">对话时自动检索已上传文件中的相关片段，注入到上下文</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingRagEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">检索片段数量</div>
+                <div class="settings-desc">每次对话注入的相关片段条数</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="0" max="10" step="1" id="settingRagCount" class="range" />
+                <span class="range-value" id="settingRagCountValue">3</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理资料库</div>
+                <div class="settings-desc">打开资料库页面上传、查看、删除文件</div>
+              </div>
+              <button class="ghost-btn" id="btnOpenLibrary">打开资料库</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="mcp" style="display:none">
+            <h3 class="settings-tab-title">MCP 服务器</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用 MCP 工具</div>
+                <div class="settings-desc">连接外部 MCP 服务器获取额外工具能力（如 open-webSearch）</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingMcpEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">添加 MCP 服务器</div>
+                <div class="settings-desc">名称 + 启动命令。例：open-webSearch · npx -y open-websearch@latest</div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:8px; min-width:300px;">
+                <input type="text" id="mcpAddName" class="text-input" placeholder="服务器名称（如 web-search）" />
+                <input type="text" id="mcpAddCommand" class="text-input" placeholder="命令（如 npx -y open-websearch@latest）" />
+                <input type="text" id="mcpAddEnv" class="text-input" placeholder="环境变量（如 MODE=stdio,DEFAULT_SEARCH_ENGINE=duckduckgo）可选" />
+                <button class="primary-btn" id="btnMcpAdd">添加</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">已连接的服务器</div>
+                <div class="settings-desc">点击刷新状态，可删除</div>
+              </div>
+              <div style="min-width:300px;">
+                <button class="ghost-btn" id="btnMcpRefresh" style="margin-bottom:8px;">刷新状态</button>
+                <div id="mcpServersList"><div class="rag-empty">还没有添加 MCP 服务器</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="skills" style="display:none">
+            <h3 class="settings-tab-title">技能</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用技能系统</div>
+                <div class="settings-desc">自动加载 .skills/&lt;name&gt;/SKILL.md，注入到 AI 上下文（兼容 Claude Code）</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingSkillsEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">技能触发模式</div>
+                <div class="settings-desc">auto = AI 自动决定是否使用；always = 总是注入所有技能描述到上下文</div>
+              </div>
+              <select id="settingSkillsMode" class="select-input">
+                <option value="auto">auto（自动）</option>
+                <option value="always">always（总是注入描述）</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理技能</div>
+                <div class="settings-desc">打开技能页面查看、创建、删除</div>
+              </div>
+              <button class="ghost-btn" id="btnOpenSkills">打开技能页</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="models" style="display:none">
+            <h3 class="settings-tab-title">模型分工</h3>
+            <div class="settings-desc" style="margin-bottom:18px;">为不同任务配置不同的模型，可以平衡成本与质量。例如：主对话用强模型，记忆摘要用小模型，子任务用快模型。留空则使用主配置。</div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">记忆模型（用于摘要编辑/抽取）</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 密钥</div>
+                <div class="settings-desc">留空则用主配置</div>
+              </div>
+              <input type="password" id="settingMemoryApiKey" class="text-input" placeholder="留空 = 用主配置" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 地址</div>
+                <div class="settings-desc">留空则用主配置</div>
+              </div>
+              <input type="text" id="settingMemoryApiBaseUrl" class="text-input" placeholder="https://api-inference.modelscope.cn/v1" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型名</div>
+                <div class="settings-desc">推荐用小模型（如 Qwen3-4B）以节省 token</div>
+              </div>
+              <input type="text" id="settingMemoryApiModel" class="text-input" placeholder="Qwen/Qwen3-4B-Instruct-2507" />
+            </div>
+
+            <h4 style="margin:24px 0 8px; color:var(--text-primary); font-size:14px;">子任务模型（后台会话/cron）</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 密钥</div>
+                <div class="settings-desc">留空则用主配置</div>
+              </div>
+              <input type="password" id="settingSubtaskApiKey" class="text-input" placeholder="留空 = 用主配置" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">API 地址</div>
+                <div class="settings-desc">留空则用主配置</div>
+              </div>
+              <input type="text" id="settingSubtaskApiBaseUrl" class="text-input" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">模型名</div>
+                <div class="settings-desc">后台会话使用的模型</div>
+              </div>
+              <input type="text" id="settingSubtaskApiModel" class="text-input" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">最大并发子任务</div>
+                <div class="settings-desc">同时运行的后台会话上限</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="1" max="10" step="1" id="settingMaxSubtasks" class="range" />
+                <span class="range-value" id="settingMaxSubtasksValue">3</span>
+              </div>
+            </div>
+
+            <h4 style="margin:24px 0 8px; color:var(--text-primary); font-size:14px;">RAG 向量化</h4>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Embedding 提供方</div>
+                <div class="settings-desc">local = 内置 TF-IDF（零依赖，约 0MB）；api = 调用 OpenAI 兼容 embedding API</div>
+              </div>
+              <select id="settingRagEmbeddingProvider" class="select-input">
+                <option value="local">local（内置 TF-IDF）</option>
+                <option value="api">api（OpenAI 兼容）</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Embedding API 密钥</div>
+                <div class="settings-desc">provider=api 时必填</div>
+              </div>
+              <input type="password" id="settingRagEmbeddingApiKey" class="text-input" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Embedding API 地址</div>
+                <div class="settings-desc">如 https://api.openai.com/v1</div>
+              </div>
+              <input type="text" id="settingRagEmbeddingApiBaseUrl" class="text-input" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Embedding 模型名</div>
+                <div class="settings-desc">如 text-embedding-3-small</div>
+              </div>
+              <input type="text" id="settingRagEmbeddingModel" class="text-input" />
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="backup" style="display:none">
+            <h3 class="settings-tab-title">备用 API</h3>
+            <div class="settings-desc" style="margin-bottom:18px;">配置备用 API（默认本地 llama.cpp 127.0.0.1:8000）。当主 API 限流或不可用时，可一键切换到备用 API。</div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用备用 API</div>
+                <div class="settings-desc">开启后才能在主 API 失败时切换</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingBackupApiEnabled" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">备用 API 地址</div>
+                <div class="settings-desc">OpenAI 兼容 API 的 base URL</div>
+              </div>
+              <input type="text" id="settingBackupApiBaseUrl" class="text-input" placeholder="http://127.0.0.1:8000/v1" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">备用 API 密钥</div>
+                <div class="settings-desc">llama.cpp 通常不需要，留空即可</div>
+              </div>
+              <input type="password" id="settingBackupApiKey" class="text-input" placeholder="无需则留空" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">备用模型名</div>
+                <div class="settings-desc">如本地 GGUF 模型名（可点"测试连接"自动获取）</div>
+              </div>
+              <input type="text" id="settingBackupApiModel" class="text-input" placeholder="如：qwen2.5-7b-instruct-q5_k_m" />
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">测试备用 API</div>
+                <div class="settings-desc">连接并获取可用模型列表</div>
+              </div>
+              <button class="ghost-btn" id="btnTestBackupApi">测试连接</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">切换到备用 API</div>
+                <div class="settings-desc">立即把主 API 切换为备用 API 配置</div>
+              </div>
+              <button class="primary-btn" id="btnUseBackup">立即切换</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="sessions" style="display:none">
+            <h3 class="settings-tab-title">多会话</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用多会话</div>
+                <div class="settings-desc">允许 AI 自主启动后台子会话处理并行任务</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingSessionsEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">最大并发子任务</div>
+                <div class="settings-desc">同时运行的后台会话数量上限</div>
+              </div>
+              <div class="range-row">
+                <input type="range" min="1" max="10" step="1" id="settingMaxSubtasksTab2" class="range" />
+                <span class="range-value" id="settingMaxSubtasksTab2Value">3</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理后台会话</div>
+                <div class="settings-desc">查看运行中和已完成的后台会话</div>
+              </div>
+              <button class="ghost-btn" id="btnOpenSessions">打开会话页</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="cron" style="display:none">
+            <h3 class="settings-tab-title">定时任务</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">启用 cron 调度器</div>
+                <div class="settings-desc">后台运行 cron 调度器，到点自动 spawn 会话执行任务</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingCronEnabled" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">管理定时任务</div>
+                <div class="settings-desc">创建、查看、删除定时任务</div>
+              </div>
+              <button class="ghost-btn" id="btnOpenCron">打开定时任务页</button>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="data" style="display:none">
+            <h3 class="settings-tab-title">数据</h3>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">清空所有对话</div>
+                <div class="settings-desc">删除浏览器中保存的全部历史记录</div>
+              </div>
+              <button class="danger-btn" id="btnClearAll">清空对话</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">导出对话</div>
+                <div class="settings-desc">下载全部对话为 JSON 文件</div>
+              </div>
+              <button class="ghost-btn" id="btnExport">导出</button>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">Debug 调试模式</div>
+                <div class="settings-desc">开启后在左侧导航显示 Debug 入口，可查看/编辑/清空所有 AI 生成数据，时间加速，手动触发 Life Loop</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settingDebugMode" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="prompts" style="display:none">
+            <h3 class="settings-tab-title">Prompt 工程</h3>
+            <div class="settings-desc" style="margin-bottom:18px;">自定义所有 LLM 内部使用的 Prompt。留空则使用内置默认值。修改后立即生效。</div>
+
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">系统提示词</div>
+                <div class="settings-desc">AI 的基础人设和回答规则</div>
+              </div>
+              <textarea id="settingPromptSystem" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">记忆摘要编辑</div>
+                <div class="settings-desc">每次对话后 LLM 编辑记忆摘要的指令</div>
+              </div>
+              <textarea id="settingPromptMemoryEdit" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">记忆提取</div>
+                <div class="settings-desc">从对话中提取原子事实的指令（旧模式）</div>
+              </div>
+              <textarea id="settingPromptMemoryExtract" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">认知提取</div>
+                <div class="settings-desc">从对话中提取 10 类认知更新（身份/时间线/叙事/成长等）的指令</div>
+              </div>
+              <textarea id="settingPromptCognitiveExtraction" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">反思</div>
+                <div class="settings-desc">Life Loop 每日反思的指令（整体总结，非逐条）</div>
+              </div>
+              <textarea id="settingPromptReflection" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">用户画像更新</div>
+                <div class="settings-desc">从对话中提取用户画像字段的指令</div>
+              </div>
+              <textarea id="settingPromptProfileUpdate" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">元认知自检</div>
+                <div class="settings-desc">每次回复后 AI 自检质量（信心度/矛盾/需澄清）的指令</div>
+              </div>
+              <textarea id="settingPromptMetaCognition" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">身份一致性评估</div>
+                <div class="settings-desc">Life Loop 每周评估身份阶段的指令</div>
+              </div>
+              <textarea id="settingPromptIdentityAssessment" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">对话压缩</div>
+                <div class="settings-desc">对话超长时压缩旧消息的指令</div>
+              </div>
+              <textarea id="settingPromptCompress" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">记忆重要度分类</div>
+                <div class="settings-desc">评估记忆重要度（0-100）的指令</div>
+              </div>
+              <textarea id="settingPromptClassifyImportance" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">反思树</div>
+                <div class="settings-desc">从观察中提炼高层洞察的指令</div>
+              </div>
+              <textarea id="settingPromptReflectionTree" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">标题生成</div>
+                <div class="settings-desc">为新对话生成标题的指令</div>
+              </div>
+              <textarea id="settingPromptTitle" class="settings-textarea" rows="3" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">记忆摘要生成</div>
+                <div class="settings-desc">从记忆片段生成摘要的指令（旧模式）</div>
+              </div>
+              <textarea id="settingPromptMemorySummary" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">日志 AI 起草</div>
+                <div class="settings-desc">基于当日活动生成第一人称日志草稿的指令。变量：{activity_summary}</div>
+              </div>
+              <textarea id="settingPromptJournalDraft" class="settings-textarea" rows="6" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">日志情绪分析</div>
+                <div class="settings-desc">从当日活动/日志推断情绪基调的指令。变量：{content}</div>
+              </div>
+              <textarea id="settingPromptJournalEmotion" class="settings-textarea" rows="4" placeholder="留空 = 使用默认"></textarea>
+            </div>
+            <div class="settings-row" style="border-top:1px solid var(--border-color); padding-top:14px; margin-top:8px;">
+              <div class="settings-label">
+                <div class="settings-title">Prompt 工程统计</div>
+                <div class="settings-desc" id="promptStatsDesc">加载中...</div>
+              </div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="topbar-btn" id="btnPromptsExport" title="导出所有自定义 Prompt 为 JSON">导出</button>
+                <button class="topbar-btn" id="btnPromptsImport" title="从 JSON 导入 Prompt">导入</button>
+                <button class="topbar-btn" id="btnPromptsResetAll" title="把所有 Prompt 重置为默认值" style="color:var(--danger);">全部重置</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-tab" data-tab="debug" style="display:none">
+            <h3 class="settings-tab-title">🔧 Debug 调试</h3>
+            <div class="settings-desc" style="margin-bottom:18px;">查看、编辑、清空所有 AI 生成数据。时间加速模拟 Life Loop。手动触发认知提取/反思/成长回顾。</div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">时间加速</h4>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
+              <button class="ghost-btn debug-accelerate" data-secs="3600" style="font-size:12px;">+1小时</button>
+              <button class="ghost-btn debug-accelerate" data-secs="86400" style="font-size:12px;">+1天</button>
+              <button class="ghost-btn debug-accelerate" data-secs="604800" style="font-size:12px;">+1周</button>
+              <button class="ghost-btn debug-accelerate" data-secs="2592000" style="font-size:12px;">+1月</button>
+            </div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">手动触发</h4>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;">
+              <button class="ghost-btn debug-trigger" data-cycle="hourly" style="font-size:12px;">认知提取</button>
+              <button class="ghost-btn debug-trigger" data-cycle="daily" style="font-size:12px;">反思</button>
+              <button class="ghost-btn debug-trigger" data-cycle="weekly" style="font-size:12px;">成长回顾</button>
+              <button class="ghost-btn debug-trigger" data-cycle="monthly" style="font-size:12px;">深度理解</button>
+            </div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">系统健康</h4>
+            <div id="debugHealthGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; margin-bottom:16px;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">AI 生成数据</h4>
+            <div id="debugDataGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:6px; margin-bottom:16px;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">身份 & 摘要</h4>
+            <div id="debugIdentityBox" style="background:var(--bg-elevated); padding:10px; border-radius:6px; font-size:13px; margin-bottom:8px; white-space:pre-wrap; max-height:150px; overflow-y:auto;"></div>
+            <div id="debugSummaryBox" style="background:var(--bg-elevated); padding:10px; border-radius:6px; font-size:13px; margin-bottom:16px; white-space:pre-wrap; max-height:150px; overflow-y:auto;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">分层记忆</h4>
+            <div id="debugMemoriesList" style="margin-bottom:16px;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">反思记录</h4>
+            <div id="debugReflectionsList" style="margin-bottom:16px;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">Life Loop 状态</h4>
+            <div id="debugLifeLoopBox" style="background:var(--bg-elevated); padding:10px; border-radius:6px; font-size:12px; margin-bottom:16px;"></div>
+
+            <h4 style="margin:18px 0 8px; color:var(--text-primary); font-size:14px;">清空数据</h4>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="danger-btn debug-clear" data-store="memories" style="font-size:12px;">清空记忆</button>
+              <button class="danger-btn debug-clear" data-store="timeline" style="font-size:12px;">清空时间线</button>
+              <button class="danger-btn debug-clear" data-store="narratives" style="font-size:12px;">清空叙事</button>
+              <button class="danger-btn debug-clear" data-store="growth" style="font-size:12px;">清空成长</button>
+              <button class="danger-btn debug-clear" data-store="reflections" style="font-size:12px;">清空反思</button>
+              <button class="danger-btn debug-clear" data-store="emotions" style="font-size:12px;">清空情感</button>
+              <button class="danger-btn debug-clear" data-store="chat_vectors" style="font-size:12px;">清空聊天向量</button>
+            </div>
+          </div>
+
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Memory Modal ===== -->
+  <div class="modal-overlay" id="memoryModal" style="display:none">
+    <div class="modal memory-modal">
+      <div class="modal-header">
+        <div>
+          <h2>记忆摘要</h2>
+          <div class="memory-summary-time" id="memorySummaryTime">尚未生成</div>
+        </div>
+        <div class="memory-header-actions">
+          <button class="ghost-btn" id="btnMemoryRegenerate" title="重新生成摘要">刷新摘要</button>
+          <button class="modal-close" id="btnCloseMemory">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <!-- Memory Summary (high-level, like ChatGPT) -->
+        <div class="memory-summary-section">
+          <div class="memory-summary-text" id="memorySummaryText">还没有记忆摘要。和 AI 多聊几句，它会自动总结你分享的关键信息。</div>
+          <div class="memory-summary-edit-row">
+            <input type="text" id="memorySummaryInput" class="text-input" placeholder="添加或更新摘要内容..." />
+            <button class="primary-btn" id="btnMemorySummaryUpdate">更新</button>
+          </div>
+        </div>
+
+        <!-- Individual memory facts -->
+        <div class="memory-facts-section">
+          <div class="memory-facts-header">
+            <h3>记忆片段</h3>
+            <span class="memory-stats" id="memoryStats"></span>
+          </div>
+          <div class="memory-add-row">
+            <input type="text" id="memoryAddInput" class="text-input" placeholder="手动添加一条记忆，例如：我喜欢用 Rust 写命令行工具" />
+            <button class="ghost-btn" id="btnMemoryAdd">添加</button>
+          </div>
+          <div class="memory-list" id="memoryList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User dropdown -->
+  <div class="user-menu" id="userMenu" style="display:none">
+    <div class="user-menu-header">
+      <span class="avatar">Z</span>
+      <div>
+        <div class="um-name">zjq0107qiyun</div>
+        <div class="um-plan">免费版</div>
+      </div>
+    </div>
+    <div class="user-menu-list">
+      <button class="um-item" id="umSettings">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>设置</span>
+      </button>
+      <button class="um-item" id="umMemory">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a9 9 0 0 0-9 9c0 3.5 2 6.5 5 8v3h8v-3c3-1.5 5-4.5 5-8a9 9 0 0 0-9-9z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+        <span>记忆</span>
+      </button>
+      <button class="um-item" id="umHelp">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <span>帮助</span>
+      </button>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js?v=20260726v98"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+[project]
+name = "cambium"
+version = "0.7.0"
+description = "Cambium — The Continuity Engine for Personal AI"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "httpx>=0.27.0",
+    "jinja2>=3.1.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Vector database for semantic search (recommended)
+# Without this, falls back to TF-IDF (keyword-based)
+vector = [
+    "chromadb>=0.5.0",
+]
+# For testing
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
