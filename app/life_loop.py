@@ -91,117 +91,124 @@ class LifeLoop:
             asyncio.create_task(self._weekly_cycle()),
             asyncio.create_task(self._monthly_cycle()),
         ]
-        # 启动时立即检查是否错过了周期（长时间离线后补上）
-        asyncio.create_task(self._catch_up_missed_cycles())
-        print("[life_loop] started (hourly/daily/weekly/monthly + catch-up on startup)")
+        # 启动时检查是否需要补上当天错过的时段
+        asyncio.create_task(self._catch_up_today())
+        print("[life_loop] started (hourly/daily/weekly/monthly + today catch-up)")
 
-    async def _catch_up_missed_cycles(self):
-        """启动时检查错过的周期，补上所有漏掉的任务。
-        长时间离线后重新启动，效果和一直开着一样——只是后面自动补上。"""
+    def _is_first_run(self) -> bool:
+        """判断是否首次运行（last_run 全部为 0 或不存在）。"""
+        return all(v == 0 for v in self._last_run.values() if isinstance(v, (int, float)))
+
+    def _get_catchup_settings(self) -> Dict:
+        """从 settings 读取补上相关配置。
+        - catchup_enabled: 是否启用补上（默认 false=不补）
+        - catchup_start_hour: 当天补上的起始小时（默认 0=凌晨）
+        - catchup_end_hour: 当天补上的结束小时（默认 24=全天）
+        """
         try:
-            now = int(time.time())
-            missed = []
+            conn = safe_connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key='life_loop_catchup_settings'"
+            ).fetchone()
+            conn.close()
+            if row:
+                return json.loads(row["value"])
+        except Exception:
+            pass
+        return {"enabled": False, "start_hour": 0, "end_hour": 24}
 
-            # 检查每个周期是否错过
-            hours_missed = (now - self._last_run["hourly"]) // HOURLY_INTERVAL
-            days_missed = (now - self._last_run["daily"]) // DAILY_INTERVAL
-            weeks_missed = (now - self._last_run["weekly"]) // WEEKLY_INTERVAL
-            months_missed = (now - self._last_run["monthly"]) // MONTHLY_INTERVAL
-
-            if hours_missed >= 1:
-                missed.append(f"hourly×{hours_missed}")
-            if days_missed >= 1:
-                missed.append(f"daily×{days_missed}")
-            if weeks_missed >= 1:
-                missed.append(f"weekly×{weeks_missed}")
-            if months_missed >= 1:
-                missed.append(f"monthly×{months_missed}")
-
-            if missed:
-                print(f"[life_loop] 检测到错过的周期: {', '.join(missed)}，开始补上...")
-
-                # 补上错过的 daily 任务（每天一个晨报 + 发现 + 居民工作）
-                # 但限制最多补 7 天，防止无限执行
-                days_to_catch_up = min(days_missed, 7)
-                if days_to_catch_up >= 1:
-                    print(f"[life_loop] 补上 {days_to_catch_up} 天的 daily 任务...")
-                    for i in range(days_to_catch_up):
-                        await self._run_daily_catchup(i)
-
-                # 补上错过的 weekly 任务（限制最多 4 周）
-                weeks_to_catch_up = min(weeks_missed, 4)
-                if weeks_to_catch_up >= 1:
-                    print(f"[life_loop] 补上 {weeks_to_catch_up} 周的 weekly 任务...")
-                    for i in range(weeks_to_catch_up):
-                        await self._run_weekly_catchup(i)
-
-                # 补上错过的 monthly 任务（限制最多 3 个月）
-                months_to_catch_up = min(months_missed, 3)
-                if months_to_catch_up >= 1:
-                    print(f"[life_loop] 补上 {months_to_catch_up} 个月的 monthly 任务...")
-                    for i in range(months_to_catch_up):
-                        await self._run_monthly_catchup(i)
-
-                # 更新所有 last_run 为当前时间（标记已补上）
-                self._last_run = {"hourly": now, "daily": now, "weekly": now, "monthly": now}
-                self._save_last_runs()
-                print("[life_loop] 补上完成")
-            else:
-                print("[life_loop] 无错过的周期")
+    def _save_catchup_settings(self, settings: Dict):
+        try:
+            conn = safe_connect(self.db_path)
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('life_loop_catchup_settings', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (json.dumps(settings),)
+            )
+            conn.commit()
+            conn.close()
         except Exception as e:
-            print(f"[life_loop] catch-up failed: {e}")
+            print(f"[life_loop] save catchup settings failed: {e}")
 
-    async def _run_daily_catchup(self, day_offset: int):
-        """补上某一天的 daily 任务（晨报 + 发现 + 居民工作）。
-        day_offset: 0=今天, 1=昨天, 2=前天..."""
+    async def _catch_up_today(self):
+        """启动时检查当天是否错过了 daily 时段，如果启用补上则执行。
+        
+        逻辑：
+        1. 首次运行（无 last_run）→ 不补，直接标记当前时间
+        2. 补上未启用（默认）→ 不补
+        3. 补上启用 + 今天还没执行过 daily → 检查当前时间是否在补上时段内
+           - 在时段内 → 立即执行今天的 daily
+           - 不在时段内 → 不补（当天时段错过了就不补）
+        4. 补上启用 + 今天已执行过 daily → 不补（已做过了）
+        """
         try:
-            from datetime import datetime, timedelta
-            target_date = (datetime.now() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
-            print(f"[life_loop] 补上 {target_date} 的 daily 任务...")
+            # 1. 首次运行检测
+            if self._is_first_run():
+                now = int(time.time())
+                self._last_run = {
+                    "hourly": now, "daily": now, "weekly": now,
+                    "monthly": now, "hourly_prev": now,
+                }
+                self._save_last_runs()
+                print("[life_loop] 首次运行，跳过补上")
+                return
 
-            # 1. 晨报（如果该日期还没有）
+            # 2. 读取补上设置
+            catchup_settings = self._get_catchup_settings()
+            if not catchup_settings.get("enabled", False):
+                print("[life_loop] 补上未启用，跳过")
+                return
+
+            # 3. 检查今天是否已执行过 daily
+            now = int(time.time())
+            from datetime import datetime
+            today_start = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+            last_daily = self._last_run.get("daily", 0)
+            if last_daily >= today_start:
+                print("[life_loop] 今天已执行过 daily，跳过补上")
+                return
+
+            # 4. 检查当前时间是否在补上时段内
+            current_hour = datetime.now().hour
+            start_hour = catchup_settings.get("start_hour", 0)
+            end_hour = catchup_settings.get("end_hour", 24)
+            if current_hour < start_hour or current_hour >= end_hour:
+                print(f"[life_loop] 当前时间 {current_hour}点 不在补上时段 {start_hour}-{end_hour}点 内，跳过（当天时段错过不补）")
+                return
+
+            # 5. 执行今天的 daily 任务
+            print(f"[life_loop] 补上今天错过的 daily 任务（当前 {current_hour}点，时段 {start_hour}-{end_hour}点）...")
+            today_str = datetime.now().strftime("%Y-%m-%d")
+
+            # 晨报
             try:
                 from app import mornings
-                existing = mornings.get(self.db_path, "default", target_date)
+                existing = mornings.get(self.db_path, "default", today_str)
                 if not existing or not existing.get("letter"):
-                    await self._generate_morning_letter_for_date(target_date)
+                    await self._generate_morning_letter_for_date(today_str)
             except Exception as e:
-                print(f"[life_loop] catchup morning for {target_date} failed: {e}")
+                print(f"[life_loop] 补上晨报失败: {e}")
 
-            # 2. 发现（基于该日期的活动）
-            # 注意：不重复创建已有的发现
+            # 发现
             try:
-                await self._auto_discover_for_date(target_date)
+                await self._auto_discover_for_date(today_str)
             except Exception as e:
-                print(f"[life_loop] catchup discover for {target_date} failed: {e}")
+                print(f"[life_loop] 补上发现失败: {e}")
 
-            # 3. 居民工作（只在补上最近 1 天时执行，避免成本过高）
-            if day_offset == 0:
-                try:
-                    await self._residents_do_daily_work()
-                except Exception as e:
-                    print(f"[life_loop] catchup residents work failed: {e}")
-        except Exception as e:
-            print(f"[life_loop] daily catchup failed: {e}")
+            # 居民工作
+            try:
+                await self._residents_do_daily_work()
+            except Exception as e:
+                print(f"[life_loop] 补上居民工作失败: {e}")
 
-    async def _run_weekly_catchup(self, week_offset: int):
-        """补上某一周的 weekly 任务。"""
-        try:
-            print(f"[life_loop] 补上第 {week_offset+1} 周的 weekly 任务...")
-            await self._run_growth_review()
-            await self._run_identity_assessment()
-            await self._adjust_retrieval_weights()
-            await self._auto_validate_quarantine()
-        except Exception as e:
-            print(f"[life_loop] weekly catchup failed: {e}")
+            # 更新 last_run
+            self._last_run["daily"] = now
+            self._save_last_runs()
+            print("[life_loop] 补上完成")
 
-    async def _run_monthly_catchup(self, month_offset: int):
-        """补上某个月的 monthly 任务。"""
-        try:
-            print(f"[life_loop] 补上第 {month_offset+1} 月的 monthly 任务...")
-            await self._run_deep_understanding()
         except Exception as e:
-            print(f"[life_loop] monthly catchup failed: {e}")
+            print(f"[life_loop] catch-up failed: {e}")
 
     async def _generate_morning_letter_for_date(self, date_str: str):
         """为指定日期生成晨报。"""

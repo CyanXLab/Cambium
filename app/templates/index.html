@@ -1184,6 +1184,27 @@
               </div>
               <label class="switch"><input type="checkbox" id="settingDebugModeGeneral" /><span class="slider"></span></label>
             </div>
+            <div class="settings-row">
+              <div class="settings-label">
+                <div class="settings-title">⏰ 补上当天错过的任务</div>
+                <div class="settings-desc">启动时如果当天还没执行过 daily 任务，且当前时间在补上时段内，自动补上。默认关闭。当天时段错过不补。</div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <label class="switch"><input type="checkbox" id="settingCatchupEnabled" /><span class="slider"></span></label>
+                <div style="display:flex; gap:6px; align-items:center; font-size:12px; color:var(--text-muted);">
+                  <span>补上时段:</span>
+                  <select id="settingCatchupStartHour" style="padding:2px 4px; font-size:12px;">
+                    <option value="0">0点</option><option value="6">6点</option><option value="8">8点</option>
+                    <option value="9">9点</option><option value="10">10点</option><option value="12">12点</option>
+                  </select>
+                  <span>到</span>
+                  <select id="settingCatchupEndHour" style="padding:2px 4px; font-size:12px;">
+                    <option value="12">12点</option><option value="18">18点</option>
+                    <option value="20">20点</option><option value="22">22点</option><option value="24" selected>24点</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="settings-tab" data-tab="api" style="display:none">

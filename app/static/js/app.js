@@ -2345,6 +2345,34 @@
     if (settingDebugModeGeneral) {
       settingDebugModeGeneral.addEventListener('change', toggleDebug);
     }
+
+    // Catch-up settings
+    const catchupEnabled = $('#settingCatchupEnabled');
+    const catchupStart = $('#settingCatchupStartHour');
+    const catchupEnd = $('#settingCatchupEndHour');
+    // Load current catchup settings
+    fetch('/api/life-loop/status').then(r => r.json()).then(d => {
+      const c = d.catchup || {};
+      if (catchupEnabled) catchupEnabled.checked = c.enabled || false;
+      if (catchupStart && c.start_hour !== undefined) catchupStart.value = c.start_hour;
+      if (catchupEnd && c.end_hour !== undefined) catchupEnd.value = c.end_hour;
+    }).catch(() => {});
+    async function saveCatchupSettings() {
+      const payload = {
+        enabled: catchupEnabled ? catchupEnabled.checked : false,
+        start_hour: catchupStart ? parseInt(catchupStart.value) : 0,
+        end_hour: catchupEnd ? parseInt(catchupEnd.value) : 24,
+      };
+      try {
+        await fetch('/api/life-loop/catchup-settings', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {}
+    }
+    if (catchupEnabled) catchupEnabled.addEventListener('change', saveCatchupSettings);
+    if (catchupStart) catchupStart.addEventListener('change', saveCatchupSettings);
+    if (catchupEnd) catchupEnd.addEventListener('change', saveCatchupSettings);
     // Debug tab content loader
     const debugTabBtn = $('#debugTabBtn');
     if (debugTabBtn) {
