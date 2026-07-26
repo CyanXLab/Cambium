@@ -3349,7 +3349,7 @@ async def life_loop_status_api():
 @app.post("/api/life-loop/trigger")
 async def life_loop_trigger_api(payload: Dict):
     """Manually trigger a specific Life Loop cycle (for testing)."""
-    cycle = payload.get("cycle", "daily")  # hourly/daily/weekly/monthly
+    cycle = payload.get("cycle", "daily")  # hourly/daily/weekly/monthly/catchup
     ll = life_loop.get_life_loop()
     if not ll:
         return {"ok": False, "error": "life loop not running"}
@@ -3361,9 +3361,40 @@ async def life_loop_trigger_api(payload: Dict):
         await ll._run_growth_review()
     elif cycle == "monthly":
         await ll._run_deep_understanding()
+    elif cycle == "catchup":
+        await ll._catch_up_missed_cycles()
+    elif cycle == "daily-full":
+        await ll._run_reflection("manual-daily")
+        await ll._generate_morning_letter()
+        await ll._auto_discover()
+        await ll._residents_do_daily_work()
     else:
         return {"ok": False, "error": f"unknown cycle: {cycle}"}
     return {"ok": True, "cycle": cycle}
+
+@app.get("/api/life-loop/status")
+async def life_loop_status_api():
+    """Get Life Loop status: last run times + catch-up info."""
+    ll = life_loop.get_life_loop()
+    if not ll:
+        return {"running": False, "last_runs": {}}
+    now = int(time.time())
+    return {
+        "running": ll._running,
+        "last_runs": ll._last_run,
+        "time_since": {
+            "hourly": now - ll._last_run.get("hourly", 0),
+            "daily": now - ll._last_run.get("daily", 0),
+            "weekly": now - ll._last_run.get("weekly", 0),
+            "monthly": now - ll._last_run.get("monthly", 0),
+        },
+        "missed": {
+            "hourly": max(0, (now - ll._last_run.get("hourly", 0)) // 3600),
+            "daily": max(0, (now - ll._last_run.get("daily", 0)) // 86400),
+            "weekly": max(0, (now - ll._last_run.get("weekly", 0)) // 604800),
+            "monthly": max(0, (now - ll._last_run.get("monthly", 0)) // 2592000),
+        },
+    }
 
 
 # ============================================================

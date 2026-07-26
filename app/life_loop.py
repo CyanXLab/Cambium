@@ -54,10 +54,17 @@ class LifeLoop:
             ).fetchone()
             conn.close()
             if row:
-                return json.loads(row["value"])
+                data = json.loads(row["value"])
+                # Ensure all keys exist + add hourly_prev for decay calculation
+                data.setdefault("hourly", 0)
+                data.setdefault("daily", 0)
+                data.setdefault("weekly", 0)
+                data.setdefault("monthly", 0)
+                data.setdefault("hourly_prev", data.get("hourly", 0))
+                return data
         except Exception:
             pass
-        return {"hourly": 0, "daily": 0, "weekly": 0, "monthly": 0}
+        return {"hourly": 0, "daily": 0, "weekly": 0, "monthly": 0, "hourly_prev": 0}
 
     def _save_last_runs(self):
         """Persist last-run timestamps to DB."""
@@ -84,7 +91,147 @@ class LifeLoop:
             asyncio.create_task(self._weekly_cycle()),
             asyncio.create_task(self._monthly_cycle()),
         ]
-        print("[life_loop] started (hourly/daily/weekly/monthly)")
+        # 启动时立即检查是否错过了周期（长时间离线后补上）
+        asyncio.create_task(self._catch_up_missed_cycles())
+        print("[life_loop] started (hourly/daily/weekly/monthly + catch-up on startup)")
+
+    async def _catch_up_missed_cycles(self):
+        """启动时检查错过的周期，补上所有漏掉的任务。
+        长时间离线后重新启动，效果和一直开着一样——只是后面自动补上。"""
+        try:
+            now = int(time.time())
+            missed = []
+
+            # 检查每个周期是否错过
+            hours_missed = (now - self._last_run["hourly"]) // HOURLY_INTERVAL
+            days_missed = (now - self._last_run["daily"]) // DAILY_INTERVAL
+            weeks_missed = (now - self._last_run["weekly"]) // WEEKLY_INTERVAL
+            months_missed = (now - self._last_run["monthly"]) // MONTHLY_INTERVAL
+
+            if hours_missed >= 1:
+                missed.append(f"hourly×{hours_missed}")
+            if days_missed >= 1:
+                missed.append(f"daily×{days_missed}")
+            if weeks_missed >= 1:
+                missed.append(f"weekly×{weeks_missed}")
+            if months_missed >= 1:
+                missed.append(f"monthly×{months_missed}")
+
+            if missed:
+                print(f"[life_loop] 检测到错过的周期: {', '.join(missed)}，开始补上...")
+
+                # 补上错过的 daily 任务（每天一个晨报 + 发现 + 居民工作）
+                # 但限制最多补 7 天，防止无限执行
+                days_to_catch_up = min(days_missed, 7)
+                if days_to_catch_up >= 1:
+                    print(f"[life_loop] 补上 {days_to_catch_up} 天的 daily 任务...")
+                    for i in range(days_to_catch_up):
+                        await self._run_daily_catchup(i)
+
+                # 补上错过的 weekly 任务（限制最多 4 周）
+                weeks_to_catch_up = min(weeks_missed, 4)
+                if weeks_to_catch_up >= 1:
+                    print(f"[life_loop] 补上 {weeks_to_catch_up} 周的 weekly 任务...")
+                    for i in range(weeks_to_catch_up):
+                        await self._run_weekly_catchup(i)
+
+                # 补上错过的 monthly 任务（限制最多 3 个月）
+                months_to_catch_up = min(months_missed, 3)
+                if months_to_catch_up >= 1:
+                    print(f"[life_loop] 补上 {months_to_catch_up} 个月的 monthly 任务...")
+                    for i in range(months_to_catch_up):
+                        await self._run_monthly_catchup(i)
+
+                # 更新所有 last_run 为当前时间（标记已补上）
+                self._last_run = {"hourly": now, "daily": now, "weekly": now, "monthly": now}
+                self._save_last_runs()
+                print("[life_loop] 补上完成")
+            else:
+                print("[life_loop] 无错过的周期")
+        except Exception as e:
+            print(f"[life_loop] catch-up failed: {e}")
+
+    async def _run_daily_catchup(self, day_offset: int):
+        """补上某一天的 daily 任务（晨报 + 发现 + 居民工作）。
+        day_offset: 0=今天, 1=昨天, 2=前天..."""
+        try:
+            from datetime import datetime, timedelta
+            target_date = (datetime.now() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+            print(f"[life_loop] 补上 {target_date} 的 daily 任务...")
+
+            # 1. 晨报（如果该日期还没有）
+            try:
+                from app import mornings
+                existing = mornings.get(self.db_path, "default", target_date)
+                if not existing or not existing.get("letter"):
+                    await self._generate_morning_letter_for_date(target_date)
+            except Exception as e:
+                print(f"[life_loop] catchup morning for {target_date} failed: {e}")
+
+            # 2. 发现（基于该日期的活动）
+            # 注意：不重复创建已有的发现
+            try:
+                await self._auto_discover_for_date(target_date)
+            except Exception as e:
+                print(f"[life_loop] catchup discover for {target_date} failed: {e}")
+
+            # 3. 居民工作（只在补上最近 1 天时执行，避免成本过高）
+            if day_offset == 0:
+                try:
+                    await self._residents_do_daily_work()
+                except Exception as e:
+                    print(f"[life_loop] catchup residents work failed: {e}")
+        except Exception as e:
+            print(f"[life_loop] daily catchup failed: {e}")
+
+    async def _run_weekly_catchup(self, week_offset: int):
+        """补上某一周的 weekly 任务。"""
+        try:
+            print(f"[life_loop] 补上第 {week_offset+1} 周的 weekly 任务...")
+            await self._run_growth_review()
+            await self._run_identity_assessment()
+            await self._adjust_retrieval_weights()
+            await self._auto_validate_quarantine()
+        except Exception as e:
+            print(f"[life_loop] weekly catchup failed: {e}")
+
+    async def _run_monthly_catchup(self, month_offset: int):
+        """补上某个月的 monthly 任务。"""
+        try:
+            print(f"[life_loop] 补上第 {month_offset+1} 月的 monthly 任务...")
+            await self._run_deep_understanding()
+        except Exception as e:
+            print(f"[life_loop] monthly catchup failed: {e}")
+
+    async def _generate_morning_letter_for_date(self, date_str: str):
+        """为指定日期生成晨报。"""
+        try:
+            from app import mornings
+            existing = mornings.get(self.db_path, "default", date_str)
+            if existing and existing.get("letter"):
+                return  # 已有，跳过
+            await mornings.generate_letter(
+                self.db_path, "default", date_str,
+                http_client_factory=lambda timeout: __import__('httpx').AsyncClient(timeout=timeout),
+                get_api_cfg=self.get_memory_api_cfg,
+            )
+            print(f"[life_loop] 补上了 {date_str} 的晨报")
+        except Exception as e:
+            print(f"[life_loop] morning letter for {date_str} failed: {e}")
+
+    async def _auto_discover_for_date(self, date_str: str):
+        """为指定日期生成发现（不重复创建）。"""
+        try:
+            from app import discovery
+            from datetime import datetime
+            # 检查该日期是否已有发现
+            existing = discovery.list_by_date(self.db_path, "default", date_str)
+            if existing:
+                return  # 已有，跳过
+            # 创建该日期的发现
+            await self._auto_discover()
+        except Exception as e:
+            print(f"[life_loop] discover for {date_str} failed: {e}")
 
     def stop(self):
         """Stop all cycles."""
@@ -103,11 +250,15 @@ class LifeLoop:
                     continue
                 self._last_run["hourly"] = now
                 self._save_last_runs()
-                # 1. Apply memory decay
+                # 1. Apply memory decay — 按实际过去的时间计算
                 try:
                     from app import memory_orchestrator, episodic_memory
-                    memory_orchestrator.apply_decay(self.db_path, user_id="default", days_elapsed=0.04)
+                    # 计算自上次运行以来实际过去的小时数（最多 168 小时=7天）
+                    hours_elapsed = min((now - (self._last_run.get("hourly_prev", now))) / 3600.0, 168.0)
+                    days_elapsed = hours_elapsed / 24.0
+                    memory_orchestrator.apply_decay(self.db_path, user_id="default", days_elapsed=days_elapsed)
                     episodic_memory.apply_decay(self.db_path, user_id="default")
+                    self._last_run["hourly_prev"] = now
                 except Exception as e:
                     print(f"[life_loop] hourly decay failed: {e}")
                 # 2. Extract cognitive updates from recent chat (if enough new messages)
