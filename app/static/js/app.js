@@ -1479,6 +1479,7 @@
       personality: state.settings.personality,
       enable_tools: !state.temporary,  // enable tools in normal mode
       conversation_id: state.temporary ? null : conv.id,  // for title generation
+      resident: state.resident || null,  // 指定回复的居民（null=自动选择）
     };
 
     let thinkingStart = null;
@@ -2031,7 +2032,7 @@
     if (el.settingBackupApiBaseUrl) el.settingBackupApiBaseUrl.value = state.settings.backup_api_base_url || 'http://127.0.0.1:8000/v1';
     if (el.settingBackupApiKey) el.settingBackupApiKey.value = state.settings.backup_api_key || '';
     if (el.settingBackupApiModel) el.settingBackupApiModel.value = state.settings.backup_api_model || '';
-    // Prompt engineering
+    // Prompt engineering — 加载默认 prompt 作为初始值
     const promptMap = {
       settingPromptSystem: 'prompt_system',
       settingPromptMemoryEdit: 'prompt_memory_edit',
@@ -2049,8 +2050,22 @@
       settingPromptJournalDraft: 'prompt_journal_draft',
       settingPromptJournalEmotion: 'prompt_journal_emotion',
     };
+    // 先用用户保存的值（如果有），否则从 API 加载默认值
     for (const [elKey, settingKey] of Object.entries(promptMap)) {
-      if (el[elKey]) el[elKey].value = state.settings[settingKey] || '';
+      if (el[elKey]) {
+        const userVal = state.settings[settingKey] || '';
+        if (userVal) {
+          el[elKey].value = userVal;
+        } else {
+          // 从 API 加载默认值
+          fetch(`/api/prompts/${encodeURIComponent(settingKey)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              if (d && d.default) el[elKey].value = d.default;
+            })
+            .catch(() => {});
+        }
+      }
     }
     el.settingPersonality.value = state.settings.personality;
     el.settingLanguage.value = state.settings.language;
@@ -2304,21 +2319,31 @@
     if (btnAbout) btnAbout.addEventListener('click', () => {
       uiAlert('Cambium — 持续存在的认知层\n\nModels change. Memories grow. Identity persists.\n\n模型会变，记忆会生长，身份得以延续。\n\nhttps://github.com/CyanXLab/Cambium');
     });
-    // Debug mode toggle (in settings → data)
+    // Debug mode toggle (in settings → general + data)
     const settingDebugMode = $('#settingDebugMode');
+    const settingDebugModeGeneral = $('#settingDebugModeGeneral');
+    function syncDebugToggle(checked) {
+      if (settingDebugMode) settingDebugMode.checked = checked;
+      if (settingDebugModeGeneral) settingDebugModeGeneral.checked = checked;
+      const btn = $('#debugTabBtn');
+      if (btn) btn.style.display = checked ? '' : 'none';
+    }
+    // Load current state
+    fetch('/api/debug/status').then(r => r.json()).then(d => {
+      syncDebugToggle(d.debug_mode);
+    }).catch(() => {});
+    async function toggleDebug() {
+      const resp = await fetch('/api/debug/toggle', { method: 'POST' });
+      const d = await resp.json();
+      syncDebugToggle(d.debug_mode);
+      if (d.debug_mode) toast('Debug 模式已开启', 'success');
+      else toast('Debug 模式已关闭');
+    }
     if (settingDebugMode) {
-      // Load current state
-      fetch('/api/debug/status').then(r => r.json()).then(d => {
-        settingDebugMode.checked = d.debug_mode;
-        $('#debugTabBtn').style.display = d.debug_mode ? '' : 'none';
-      });
-      settingDebugMode.addEventListener('change', async () => {
-        const resp = await fetch('/api/debug/toggle', { method: 'POST' });
-        const d = await resp.json();
-        $('#debugTabBtn').style.display = d.debug_mode ? '' : 'none';
-        if (d.debug_mode) toast('Debug 模式已开启', 'success');
-        else toast('Debug 模式已关闭');
-      });
+      settingDebugMode.addEventListener('change', toggleDebug);
+    }
+    if (settingDebugModeGeneral) {
+      settingDebugModeGeneral.addEventListener('change', toggleDebug);
     }
     // Debug tab content loader
     const debugTabBtn = $('#debugTabBtn');
@@ -2504,6 +2529,24 @@
         switchView(view);
       });
     });
+
+    // Nav group collapse/expand
+    document.querySelectorAll('.nav-group-toggle').forEach(toggle => {
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        const group = toggle.closest('.nav-group');
+        if (group) group.classList.toggle('collapsed');
+      });
+    });
+
+    // Resident selector — send resident with chat request
+    const residentSelect = document.getElementById('residentSelect');
+    if (residentSelect) {
+      residentSelect.addEventListener('change', () => {
+        state.resident = residentSelect.value || '';
+        saveState();
+      });
+    }
     if (el.btnLibBack) el.btnLibBack.addEventListener('click', () => switchView('chat'));
     if (el.btnSkillsBack) el.btnSkillsBack.addEventListener('click', () => switchView('chat'));
     if (el.btnOpenLibrary) el.btnOpenLibrary.addEventListener('click', () => { el.settingsModal.style.display = 'none'; switchView('library'); });

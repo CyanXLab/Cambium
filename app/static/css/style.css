@@ -2483,3 +2483,99 @@ textarea, input, button { line-height: inherit; }
   margin-right: 4px;
   font-size: 0.95em;
 }
+
+/* ============================================================
+   Sidebar Nav Groups — 分类折叠
+   ============================================================ */
+.nav-group { margin-bottom: 4px; }
+.nav-group-title {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted);
+  padding: 8px 12px 4px; opacity: 0.7;
+}
+.nav-group-toggle {
+  cursor: pointer; user-select: none; display: flex;
+  align-items: center; justify-content: space-between;
+  padding: 6px 12px;
+}
+.nav-group-toggle:hover { color: var(--text-primary); opacity: 1; }
+.nav-group-toggle .chev {
+  transition: transform var(--transition);
+}
+.nav-group.collapsible.collapsed .chev { transform: rotate(-90deg); }
+.nav-group.collapsible.collapsed .nav-group-items { display: none; }
+.nav-group-items { display: flex; flex-direction: column; }
+
+/* ============================================================
+   History — 置顶区域
+   ============================================================ */
+.history-pinned-section {
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px; padding-bottom: 4px;
+}
+.history-pinned-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text-muted); padding: 4px 12px; opacity: 0.6;
+}
+.history-item .pin-btn {
+  display: none; position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%); background: transparent; border: none;
+  color: var(--text-muted); cursor: pointer; padding: 2px;
+  border-radius: 3px;
+}
+.history-item:hover .pin-btn { display: flex; }
+.history-item.pinned .pin-btn { display: flex; color: #f59e0b; }
+.history-item.pinned {
+  background: rgba(245, 158, 11, 0.08);
+  border-left: 2px solid #f59e0b;
+}
+
+/* ============================================================
+   Discovery cards — 4 列网格（和 suggest-card 一致）
+   ============================================================ */
+.welcome-discovery-cards {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .welcome-discovery-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ============================================================
+   Resident selector — 聊天里选择居民
+   ============================================================ */
+.resident-selector {
+  display: flex; gap: 4px; align-items: center;
+  padding: 4px 8px; background: var(--bg-soft);
+  border-radius: 6px; margin-right: 8px;
+}
+.resident-selector select {
+  background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 12px; cursor: pointer;
+  font-family: inherit;
+}
+.resident-selector select option {
+  background: var(--bg-elevated, var(--bg-main));
+  color: var(--text-primary);
+}
+.resident-selector-label {
+  font-size: 11px; color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Resident prefix in chat — 更显眼
+   ============================================================ */
+.resident-prefix {
+  display: inline-block;
+  font-weight: 700;
+  color: var(--accent-blue, #3b82f6);
+  margin-right: 6px;
+  font-size: 0.95em;
+  padding: 1px 4px;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 3px;
+}
