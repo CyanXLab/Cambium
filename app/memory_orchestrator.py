@@ -913,7 +913,7 @@ REFLECTION_PROMPT = """你是 CyanX AI 的反思系统。基于最近的对话�
 1. summary: 一段话总结最近的对话模式和、用户状态变化、值得注意的信号
 2. insights: 2-3 条洞察（如"用户最近对系统设计类游戏的兴趣明显上升"、"用户开始关注性能优化"）
 3. profile_updates: 用户画像字段的更新（JSON 对象，只包含需要更新的字段）
-4. new_memories: 应该新增到长期/永久记忆的关键事实（数组，每项 {content, importance, category}）
+4. new_memories: 应该新增到长期/永久记忆的关键事实（数组，每项 {{content, importance, category}}）
 
 规则：
 - 反思是整体理解，不是逐条总结

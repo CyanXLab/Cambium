@@ -1061,25 +1061,25 @@ COGNITIVE_EXTRACTION_PROMPT_DEFAULT = """你是 Cambium 的认知内核。从最
 从对话中提取以下认知更新（只输出有变化的字段，没有则对应空数组或空对象）：
 
 1. identity_shifts: 身份演化事件（如"第一次参与架构决策"、"开始主动提出反对意见"）
-   [{shift_type, description, significance}]
+   [{{shift_type, description, significance}}]
 2. timeline_events: 值得记入共同时间线的事件（里程碑/决策/冲突/成就）
-   [{title, occurred_at, category, significance, narrative}]
+   [{{title, occurred_at, category, significance, narrative}}]
 3. narratives: 故事性记忆（不是事实，而是有情节的故事）
-   [{title, story, themes, emotional_resonance}]
+   [{{title, story, themes, emotional_resonance}}]
 4. growth_insights: 从这次交互中学到的（如"用户不喜欢太多选项"）
-   [{insight, category, confidence}]
+   [{{insight, category, confidence}}]
 5. corrections: 用户纠正了 AI 的地方
-   [{what_ai_did, what_user_wanted, lesson}]
+   [{{what_ai_did, what_user_wanted, lesson}}]
 6. world_entities: 用户世界中出现的实体（人/项目/工具/地点）
-   [{name, entity_type, description}]
+   [{{name, entity_type, description}}]
 7. world_relations: 实体间关系
-   [{subject, predicate, obj}]
+   [{{subject, predicate, obj}}]
 8. long_term_goals: 用户提到的长期目标
-   [{goal, rationale}]
+   [{{goal, rationale}}]
 9. commitments: AI 答应要做的事
-   [{description, due_date}]
+   [{{description, due_date}}]
 10. concepts: 兴趣概念聚类（如从多个具体游戏抽象出"复杂系统模拟"）
-    [{name, description, member_entities}]
+    [{{name, description, member_entities}}]
 
 输出 JSON：
 ```json

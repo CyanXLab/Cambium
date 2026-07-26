@@ -5275,7 +5275,7 @@ async def journal_update_fields(date_str: str, payload: Dict):
     return journal_mod.update_fields(DB_PATH, "default", date_str, payload)
 
 @app.post("/api/journal/{date_str}/ai-draft")
-async def journal_set_ai_draft(date_str: str, payload: Dict):
+async def journal_set_ai_draft(date_str: str, payload: Optional[Dict] = None):
     """AI generates a draft for the day. Uses today's activity + LLM."""
     # 1. Gather day's activity
     activity = journal_mod.gather_day_activity(DB_PATH, "default", date_str)

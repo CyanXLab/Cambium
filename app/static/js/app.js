@@ -4048,7 +4048,7 @@
       }
       el.inboxListContainer.innerHTML = items.map(it => {
         const ts = new Date(it.created_at * 1000).toLocaleString('zh-CN', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-        const statusLabel = it.status === 'pending' ? '待处理' : (it.status === 'processed' ? '已处理→' + + (it.destination || '') : (it.status === 'archived' ? '已归档' : it.status));
+        const statusLabel = it.status === 'pending' ? '待处理' : (it.status === 'processed' ? '已处理→' + (it.destination || '') : (it.status === 'archived' ? '已归档' : it.status));
         return `<div class="inbox-item" data-id="${it.id}">
           <span class="inbox-item-type">${it.type}</span>
           <div class="inbox-item-body">
