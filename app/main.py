@@ -2138,8 +2138,7 @@ async def chat_stream(req: ChatRequest):
             if m.role == "user":
                 last_user_q = m.content
                 break
-        # Check complexity tier
-        tier = complexity_tier.get_complexity_tier(DB_PATH, req.user_id)
+        # 所有功能全部可用——不再有渐进复杂度
         # 1. Core memory context (always inject — identity + goals + recent memories)
         try:
             cached_ctx = context_cache.get_context_cache().get(req.user_id)
@@ -2163,8 +2162,8 @@ async def chat_stream(req: ChatRequest):
                     context_cache.get_context_cache().set(req.user_id, ctx["combined"])
         except Exception as e:
             print(f"[context] build failed: {e}")
-        # 2. Chat vectors (for growing+ tiers)
-        if tier in ("growing", "mature", "full") and s_all.get("chat_vectors_enabled", "true") != "false":
+        # 2. Chat vectors (语义搜索过往对话)
+        if s_all.get("chat_vectors_enabled", "true") != "false":
             cv_top_k = int(s_all.get("chat_vectors_search_top_k", "5") or "5")
             if cv_top_k > 0 and last_user_q and len(last_user_q) > 10:
                 try:
@@ -2174,8 +2173,8 @@ async def chat_stream(req: ChatRequest):
                         sys_parts.append(f"【过往对话】（自然参考，不要复述）\n{cv_text}")
                 except Exception as e:
                     print(f"[chat_vectors] search failed: {e}")
-        # 3. Knowledge graph (only for full tier)
-        if tier == "full" and last_user_q and len(last_user_q) > 5:
+        # 3. Knowledge graph (知识图谱)
+        if last_user_q and len(last_user_q) > 5:
             try:
                 kg_entities = knowledge_graph.search_entities(DB_PATH, user_id=req.user_id, query=last_user_q, top_k=2)
                 if kg_entities:
@@ -2189,9 +2188,8 @@ async def chat_stream(req: ChatRequest):
                         sys_parts.append(f"【知识图谱】\n" + "\n".join(kg_lines[:5]))
             except Exception as e:
                 print(f"[kg] retrieval failed: {e}")
-        # 4. Episodic memory (only when user asks about past events)
-        if tier in ("mature", "full") and last_user_q and s_all.get("proactive_recall", "true") != "false":
-            # Only search episodes if query has temporal cues
+        # 4. Episodic memory (当用户问过去事件时)
+        if last_user_q and s_all.get("proactive_recall", "true") != "false":
             recall_cues = ["上次", "之前", "那个", "后来", "记得", "还记得", "之前说"]
             if any(cue in last_user_q for cue in recall_cues):
                 try:
@@ -2201,7 +2199,7 @@ async def chat_stream(req: ChatRequest):
                         sys_parts.append(f"【相关事件】\n" + "\n".join(ep_lines))
                 except Exception as e:
                     print(f"[episodes] retrieval failed: {e}")
-        # 5. Emotional resonance (compact, only for growing+)
+        # 5. Emotional resonance
         if s_all.get("emotional_resonance", "true") != "false":
             sys_parts.append(
                 "【交流方式】像朋友而非机械助手：根据情绪调整回应，主动提及相关过往，理解言外之意，挫折时先共情再建议。"
