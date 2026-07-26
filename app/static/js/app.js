@@ -1534,7 +1534,13 @@
           let data;
           try { data = JSON.parse(dataStr); } catch { continue; }
 
-          if (evType === 'thinking' && thinkBody) {
+          if (evType === 'resident') {
+            // Resident info — store prefix to display at start of message
+            assistantMsg.resident = data;
+            if (data.prefix) {
+              contentEl.innerHTML = `<span class="resident-prefix">${escapeHtml(data.prefix)}</span>`;
+            }
+          } else if (evType === 'thinking' && thinkBody) {
             if (!thinkingStart) thinkingStart = Date.now();
             assistantMsg.reasoning += data.text || '';
             thinkBody.textContent = assistantMsg.reasoning;
@@ -1544,7 +1550,7 @@
             // Show tool call panel
             if (firstDelta) {
               firstDelta = false;
-              contentEl.innerHTML = '';
+              contentEl.innerHTML = assistantMsg.resident?.prefix ? `<span class="resident-prefix">${escapeHtml(assistantMsg.resident.prefix)}</span>` : '';
               if (thinkHeader) {
                 thinkHeader.classList.add('done');
                 thinkPanel.classList.add('collapsed');
@@ -1614,7 +1620,7 @@
           } else if (evType === 'delta') {
             if (firstDelta) {
               firstDelta = false;
-              contentEl.innerHTML = ''; // clear "思考中..."
+              contentEl.innerHTML = assistantMsg.resident?.prefix ? `<span class="resident-prefix">${escapeHtml(assistantMsg.resident.prefix)}</span>` : '';
               if (thinkHeader) {
                 thinkHeader.classList.add('done');
                 const dur = thinkingStart ? ((Date.now() - thinkingStart) / 1000).toFixed(1) : null;

@@ -118,7 +118,7 @@ class LifeLoop:
                 print(f"[life_loop] hourly error: {e}")
 
     async def _daily_cycle(self):
-        """Daily: reflection + morning letter + discoveries."""
+        """Daily: reflection + morning letter + discoveries + resident work."""
         while self._running:
             try:
                 await asyncio.sleep(300)  # check every 5 minutes
@@ -132,6 +132,8 @@ class LifeLoop:
                 await self._generate_morning_letter()
                 # Auto-create discoveries from recent activity
                 await self._auto_discover()
+                # Residents do their own work (shared soul, independent present)
+                await self._residents_do_daily_work()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -570,6 +572,51 @@ class LifeLoop:
                     pass
         except Exception as e:
             print(f"[life_loop] proactive check failed: {e}")
+
+    async def _residents_do_daily_work(self):
+        """每天，居民各自做自己的事。共享灵魂，独立当下。
+        每个居民根据自己的角色做不同的工作，结果写入 activity_log，
+        在第二天的晨报中显示。"""
+        try:
+            from app import residents as residents_mod
+            all_residents = residents_mod.list_residents(self.db_path, "default", status="active")
+            if not all_residents:
+                return
+
+            # 为每个角色定义每日工作
+            ROLE_TASKS = {
+                "researcher": "回顾最近的对话和记忆，找出一个值得深入研究的主题，写一段简短的研究方向建议。",
+                "historian": "回顾最近 7 天的对话和时间线，写一段周记（100-200字），记录这周发生了什么。",
+                "critic": "审查最近的记忆和认知更新，找出可能的矛盾或过度设计，提出一条改进建议。",
+                "planner": "查看当前的目标和承诺，找出最停滞的一个，建议下一步行动。",
+                "explorer": "基于最近的对话和记忆，发现一个用户可能感兴趣但还没探索的相邻领域。",
+                "architect": "审视系统的整体结构，指出一个可以简化或合并的部分。",
+                "writer": "把最近的重要记忆或时间线事件，写成一段简短的叙事（100-200字）。",
+            }
+
+            api_cfg = self.get_memory_api_cfg()
+            import httpx
+
+            for resident in all_residents:
+                role = resident["role"]
+                if role in ("general", "custom"):
+                    continue
+                task = ROLE_TASKS.get(role)
+                if not task:
+                    continue
+                try:
+                    result = await residents_mod.resident_do_work(
+                        self.db_path, resident["id"], task,
+                        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+                        get_api_cfg=self.get_memory_api_cfg,
+                    )
+                    if result.get("result"):
+                        print(f"[life_loop] {resident['name']} 完成了每日工作")
+                except Exception as e:
+                    print(f"[life_loop] {resident['name']} work failed: {e}")
+
+        except Exception as e:
+            print(f"[life_loop] residents daily work failed: {e}")
 
 
 # Global instance (set by main.py on startup)

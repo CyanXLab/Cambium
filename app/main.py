@@ -1156,6 +1156,7 @@ class ChatRequest(BaseModel):
     personality: Optional[str] = "default"
     enable_tools: Optional[bool] = True  # enable tool calling (Python, time, shell)
     conversation_id: Optional[str] = None  # for title generation
+    resident: Optional[str] = None  # 指定回复的居民（name 或 role），None=自动选择
 
 
 # ============================================================
@@ -2240,6 +2241,33 @@ async def chat_stream(req: ChatRequest):
     # 记忆、身份、时间线、原则都已经注入，AI 会根据自己的判断引用
     # 平台是基建，AI 是灵魂
 
+    # 居民选择：自动根据消息内容选择，或使用用户指定的居民
+    # 一个 Cambium + 多个声音——共享认知内核，独立当下
+    selected_resident = None
+    resident_prefix = ""
+    if not req.temporary:
+        try:
+            last_user_msg = ""
+            for m in reversed(req.messages):
+                if m.role == "user":
+                    last_user_msg = m.content
+                    break
+            selected_resident = residents_mod.select_resident_for_message(
+                DB_PATH, req.user_id or "default", last_user_msg, req.resident
+            )
+            if selected_resident:
+                resident_modifier = residents_mod.build_resident_system_prompt(selected_resident)
+                if resident_modifier:
+                    sys_parts.append(f"\n\n【当前居民视角】{resident_modifier}")
+                resident_prefix = residents_mod.build_resident_prefix(selected_resident)
+                # Update resident state
+                residents_mod.update_resident_state(
+                    DB_PATH, selected_resident["id"],
+                    focus=last_user_msg[:200] if last_user_msg else None,
+                )
+        except Exception as e:
+            print(f"[resident] selection failed: {e}")
+
     system_prompt = "\n\n".join(sys_parts)
 
     # Model Router: route chat task to appropriate tier (premium for main chat)
@@ -2316,6 +2344,14 @@ async def chat_stream(req: ChatRequest):
                     full_reasoning = ""
                     tool_calls_acc = {}  # index -> {id, name, arguments}
                     finish_reason = None
+
+                    # Send resident info to frontend so it can display the prefix
+                    if selected_resident:
+                        yield _sse("resident", {
+                            "name": selected_resident["name"],
+                            "role": selected_resident["role"],
+                            "prefix": resident_prefix,
+                        })
 
                     async with client.stream(
                         "POST",
@@ -5443,6 +5479,45 @@ async def residents_run(resident_id: str, payload: Dict):
 @app.get("/api/residents/{resident_id}/runs")
 async def resident_runs_list(resident_id: str, limit: int = 20):
     return {"items": residents_mod.list_runs(DB_PATH, resident_id=resident_id, limit=limit)}
+
+@app.get("/api/residents/{resident_id}/state")
+async def resident_state_get(resident_id: str):
+    """获取居民的独立状态（当前关注、观点、心情、活动日志）。"""
+    return residents_mod.get_resident_state(DB_PATH, resident_id)
+
+@app.get("/api/residents/{resident_id}/activity")
+async def resident_activity_get(resident_id: str, limit: int = 10):
+    """获取居民最近的活动记录。"""
+    return {"items": residents_mod.get_activity_log(DB_PATH, resident_id, limit=limit)}
+
+@app.post("/api/residents/discuss")
+async def residents_discuss_api(payload: Dict):
+    """让多个居民讨论一个话题。多轮 LLM 调用，真争论。"""
+    topic = payload.get("topic", "")
+    resident_ids = payload.get("resident_ids", [])
+    max_rounds = payload.get("max_rounds", 2)
+    if not topic or not resident_ids:
+        raise HTTPException(400, "需要 topic 和 resident_ids")
+    results = await residents_mod.resident_discuss(
+        DB_PATH, "default", topic, resident_ids,
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+        max_rounds=max_rounds,
+    )
+    return {"messages": results}
+
+@app.post("/api/residents/{resident_id}/work")
+async def resident_work_api(resident_id: str, payload: Dict):
+    """让一个居民独立完成一项工作（Life Loop 或手动触发）。"""
+    task = payload.get("task", "")
+    if not task:
+        raise HTTPException(400, "需要 task")
+    result = await residents_mod.resident_do_work(
+        DB_PATH, resident_id, task,
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+    )
+    return result
 
 @app.get("/api/resident-runs")
 async def all_runs_list(status: str = "", limit: int = 50):

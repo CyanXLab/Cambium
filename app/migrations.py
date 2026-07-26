@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 # Current schema version. Bump this when adding a migration.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -398,6 +398,27 @@ def _migrate_v6_to_v7(conn: sqlite3.Connection):
     conn.commit()
 
 
+def _migrate_v7_to_v8(conn: sqlite3.Connection):
+    """v7 → v8: Resident independent state — each resident has own focus, opinion, mood, activity log.
+    Shared soul (identity/timeline/memories from cognitive_kernel), independent present."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS resident_state (
+            resident_id TEXT PRIMARY KEY,
+            current_focus TEXT NOT NULL DEFAULT '',
+            current_opinion TEXT NOT NULL DEFAULT '',
+            current_mood TEXT NOT NULL DEFAULT 'neutral',
+            last_active INTEGER NOT NULL DEFAULT 0,
+            activity_log TEXT NOT NULL DEFAULT '[]',
+            total_interactions INTEGER NOT NULL DEFAULT 0,
+            disagreements INTEGER NOT NULL DEFAULT 0,
+            agreements INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_resident_state ON resident_state(resident_id);
+    """)
+    conn.commit()
+
+
 # Migration registry: version → function
 _MIGRATIONS: Dict[int, Callable] = {
     1: _migrate_v0_to_v1,
@@ -407,6 +428,7 @@ _MIGRATIONS: Dict[int, Callable] = {
     5: _migrate_v4_to_v5,
     6: _migrate_v5_to_v6,
     7: _migrate_v6_to_v7,
+    8: _migrate_v7_to_v8,
 }
 
 

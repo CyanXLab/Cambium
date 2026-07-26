@@ -281,9 +281,8 @@ def add_memory(db_path: Path, *, user_id: str = "default", content: str,
                     user_id=user_id,
                     content=content,
                     source=source,
-                    proposed_importance=importance,
-                    proposed_category=category,
-                    related_memory_id=mid,
+                    importance=importance,
+                    category=category,
                 )
             except Exception as e:
                 print(f"[memory] governance quarantine failed: {e}")

@@ -2472,3 +2472,14 @@ textarea, input, button { line-height: inherit; }
   font-size: 12px; line-height: 1.6; color: var(--text-primary);
   white-space: pre-wrap;
 }
+
+/* ============================================================
+   Resident prefix (声音身份标注)
+   ============================================================ */
+.resident-prefix {
+  display: inline-block;
+  font-weight: 600;
+  color: var(--accent-blue, #3b82f6);
+  margin-right: 4px;
+  font-size: 0.95em;
+}

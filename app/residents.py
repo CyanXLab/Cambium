@@ -693,6 +693,408 @@ def _normalize(d: Dict) -> Dict:
     return d
 
 
+# ============================================================
+# Independent State — 共享灵魂，独立当下
+# ============================================================
+
+def get_resident_state(db_path: Path, resident_id: str) -> Dict:
+    """获取居民的独立状态。如果不存在，创建空状态。"""
+    conn = safe_connect(db_path)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT * FROM resident_state WHERE resident_id=?", (resident_id,)
+    ).fetchone()
+    if row:
+        d = dict(row)
+        try:
+            d["activity_log"] = json.loads(d.get("activity_log") or "[]")
+        except Exception:
+            d["activity_log"] = []
+    else:
+        # Create empty state
+        now = int(time.time())
+        conn.execute(
+            "INSERT OR IGNORE INTO resident_state (resident_id, updated_at) VALUES (?,?)",
+            (resident_id, now)
+        )
+        conn.commit()
+        d = {
+            "resident_id": resident_id,
+            "current_focus": "",
+            "current_opinion": "",
+            "current_mood": "neutral",
+            "last_active": 0,
+            "activity_log": [],
+            "total_interactions": 0,
+            "disagreements": 0,
+            "agreements": 0,
+            "updated_at": now,
+        }
+    conn.close()
+    return d
+
+
+def update_resident_state(
+    db_path: Path, resident_id: str,
+    focus: Optional[str] = None,
+    opinion: Optional[str] = None,
+    mood: Optional[str] = None,
+):
+    """更新居民的当前状态。"""
+    now = int(time.time())
+    sets, vals = [], []
+    if focus is not None:
+        sets.append("current_focus=?"); vals.append(focus)
+    if opinion is not None:
+        sets.append("current_opinion=?"); vals.append(opinion)
+    if mood is not None:
+        sets.append("current_mood=?"); vals.append(mood)
+    sets.append("last_active=?"); vals.append(now)
+    sets.append("updated_at=?"); vals.append(now)
+    vals.append(resident_id)
+    conn = safe_connect(db_path)
+    # Ensure row exists
+    conn.execute(
+        "INSERT OR IGNORE INTO resident_state (resident_id, updated_at) VALUES (?,?)",
+        (resident_id, now)
+    )
+    conn.execute(
+        f"UPDATE resident_state SET {', '.join(sets)} WHERE resident_id=?", vals
+    )
+    conn.commit()
+    conn.close()
+
+
+def add_activity(db_path: Path, resident_id: str, activity: str, activity_type: str = "work"):
+    """添加一条活动记录到居民的 activity_log。"""
+    state = get_resident_state(db_path, resident_id)
+    log = state.get("activity_log", [])
+    log.insert(0, {
+        "type": activity_type,
+        "content": activity[:300],
+        "timestamp": int(time.time()),
+    })
+    # Keep last 50 activities
+    log = log[:50]
+    conn = safe_connect(db_path)
+    conn.execute(
+        "UPDATE resident_state SET activity_log=?, updated_at=? WHERE resident_id=?",
+        (json.dumps(log, ensure_ascii=False), int(time.time()), resident_id)
+    )
+    conn.execute(
+        "UPDATE resident_state SET total_interactions = total_interactions + 1 WHERE resident_id=?",
+        (resident_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_activity_log(db_path: Path, resident_id: str, limit: int = 10) -> List[Dict]:
+    """获取居民最近的活动记录。"""
+    state = get_resident_state(db_path, resident_id)
+    return state.get("activity_log", [])[:limit]
+
+
+def record_disagreement(db_path: Path, resident_id: str):
+    """记录一次与其他居民的分歧。"""
+    conn = safe_connect(db_path)
+    conn.execute(
+        "UPDATE resident_state SET disagreements = disagreements + 1 WHERE resident_id=?",
+        (resident_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def record_agreement(db_path: Path, resident_id: str):
+    """记录一次与其他居民的同意。"""
+    conn = safe_connect(db_path)
+    conn.execute(
+        "UPDATE resident_state SET agreements = agreements + 1 WHERE resident_id=?",
+        (resident_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+# Auto-select resident for a message
+# ============================================================
+
+# Role → trigger keywords
+ROLE_KEYWORDS = {
+    "architect": ["架构", "结构", "设计", "系统", "模块", "依赖", "分层", "重构", "architecture", "structure", "design", "system", "module", "refactor"],
+    "researcher": ["研究", "调研", "论文", "查找", "搜索", "对比", "分析", "了解", "学习", "research", "paper", "study", "compare", "analyze"],
+    "writer": ["写", "文章", "文档", "readme", "故事", "小说", "文案", "草稿", "write", "document", "story", "draft"],
+    "planner": ["计划", "目标", "下一步", "安排", "优先", "进度", "plan", "goal", "next", "schedule", "priority"],
+    "historian": ["上次", "之前", "记得", "历史", "过去", "以前", "last time", "before", "remember", "history", "past"],
+    "critic": ["审查", "评估", "问题", "风险", "缺陷", "不足", "review", "critique", "problem", "risk", "flaw"],
+    "explorer": ["新", "尝试", "探索", "发现", "其他", "替代", "new", "try", "explore", "discover", "alternative"],
+}
+
+
+def auto_select_resident(db_path: Path, user_id: str, user_message: str) -> Optional[Dict]:
+    """根据用户消息自动选择最合适的居民。
+    返回居民 dict 或 None（使用默认 Cambium 声音）。"""
+    if not user_message or len(user_message) < 5:
+        return None
+
+    msg_lower = user_message.lower()
+    active_residents = list_residents(db_path, user_id, status="active")
+    if not active_residents:
+        return None
+
+    # Score each resident by keyword matches
+    scored = []
+    for r in active_residents:
+        role = r["role"]
+        if role == "general" or role == "custom":
+            continue
+        kws = ROLE_KEYWORDS.get(role, [])
+        score = 0
+        for kw in kws:
+            if kw.lower() in msg_lower:
+                score += len(kw)
+        if score > 0:
+            scored.append((score, r))
+
+    if scored:
+        scored.sort(key=lambda x: -x[0])
+        return scored[0][1]
+
+    return None
+
+
+def build_resident_system_prompt(resident: Dict) -> str:
+    """构建居民的系统提示词修饰。
+    在共享认知上下文之上添加居民的个人视角。"""
+    name = resident["name"]
+    role = resident["role"]
+    system_prompt = resident.get("system_prompt", "")
+    traits = resident.get("personality_traits", {})
+
+    parts = []
+    if system_prompt:
+        parts.append(system_prompt)
+
+    # Add personality traits as context (not rules — AI decides how to use)
+    if traits:
+        trait_desc = []
+        trait_labels = {"rigor": "严谨", "curiosity": "好奇", "pushback": "反驳", "patience": "耐心"}
+        for k, v in traits.items():
+            label = trait_labels.get(k, k)
+            trait_desc.append(f"{label}: {int(v*100)}%")
+        if trait_desc:
+            parts.append(f"你的性格倾向：{', '.join(trait_desc)}")
+
+    return "\n\n".join(parts) if parts else ""
+
+
+def build_resident_prefix(resident: Dict) -> str:
+    """构建回复前缀（居民身份标注）。
+    例如：'🏗️ Architect: '
+    默认居民（general/custom）不加前缀。"""
+    if resident["role"] in ("general", "custom"):
+        return ""
+    # Map role to emoji
+    ROLE_EMOJI = {
+        "architect": "🏗️", "researcher": "🔬", "writer": "✍️",
+        "planner": "📋", "historian": "📜", "critic": "🔥",
+        "designer": "🎨", "debugger": "🐛", "explorer": "🧭",
+    }
+    emoji = ROLE_EMOJI.get(resident["role"], "💬")
+    return f"{emoji} {resident['name']}: "
+
+
+def select_resident_for_message(
+    db_path: Path, user_id: str, user_message: str,
+    user_specified: Optional[str] = None,
+) -> Optional[Dict]:
+    """选择居民的综合入口。
+    优先级：用户指定 > 自动选择 > None（默认 Cambium）"""
+    if user_specified:
+        # Try by name, then by role
+        for r in list_residents(db_path, user_id, status="active"):
+            if r["name"].lower() == user_specified.lower() or r["role"] == user_specified.lower():
+                return r
+    return auto_select_resident(db_path, user_id, user_message)
+
+
+# ============================================================
+# Resident Discussion — 多轮争论
+# ============================================================
+
+async def resident_discuss(
+    db_path: Path,
+    user_id: str,
+    topic: str,
+    resident_ids: List[str],
+    http_client_factory: Optional[Callable] = None,
+    get_api_cfg: Optional[Callable] = None,
+    max_rounds: int = 3,
+) -> List[Dict]:
+    """多个居民对一个话题进行讨论。
+    不是一次 LLM 调用——是多轮，每个居民看到前面居民的话。
+
+    返回 [{resident, message, round}, ...]
+    """
+    results = []
+    prev_messages = []
+
+    for round_num in range(max_rounds):
+        for rid in resident_ids:
+            resident = get_resident(db_path, rid)
+            if not resident or resident["status"] != "active":
+                continue
+
+            # Build prompt: resident's perspective + shared context + previous messages
+            resident_prompt = build_resident_system_prompt(resident)
+            context_parts = [f"话题：{topic}"]
+            if prev_messages:
+                context_parts.append("之前其他居民说了：")
+                for pm in prev_messages[-4:]:  # last 4 messages
+                    context_parts.append(f"  [{pm['resident_name']}] {pm['message'][:200]}")
+                context_parts.append(f"\n你是 {resident['name']}。你的观点是什么？（2-3 句话）")
+            else:
+                context_parts.append(f"\n你是 {resident['name']}。先发表你的看法。（2-3 句话）")
+
+            user_msg = "\n".join(context_parts)
+
+            # Call LLM
+            message = ""
+            if http_client_factory and get_api_cfg:
+                try:
+                    api_cfg = get_api_cfg()
+                    llm_overrides = resident.get("llm_config", {})
+                    model = llm_overrides.get("model") or api_cfg.get("api_model", "")
+                    import httpx
+                    async with http_client_factory(timeout=30.0) as client:
+                        payload = {
+                            "model": model,
+                            "messages": [
+                                {"role": "system", "content": resident_prompt or f"你是 {resident['name']}。"},
+                                {"role": "user", "content": user_msg},
+                            ],
+                            "temperature": 0.7, "max_tokens": 300,
+                            "stream": False, "enable_thinking": False,
+                        }
+                        resp = await client.post(
+                            f"{api_cfg['api_base_url']}/chat/completions",
+                            json=payload,
+                            headers={"Authorization": f"Bearer {api_cfg['api_key']}",
+                                     "Content-Type": "application/json"},
+                        )
+                        resp.raise_for_status()
+                        message = resp.json()["choices"][0]["message"]["content"].strip()
+                except Exception as e:
+                    print(f"[discuss] {resident['name']} LLM failed: {e}")
+                    message = f"（{resident['name']} 暂时无法发言）"
+            else:
+                message = f"（{resident['name']} 会在这里发言，但 LLM 未配置）"
+
+            prefix = build_resident_prefix(resident)
+            full_message = f"{prefix}{message}" if prefix else message
+
+            results.append({
+                "resident_id": rid,
+                "resident_name": resident["name"],
+                "resident_role": resident["role"],
+                "message": full_message,
+                "raw_message": message,
+                "round": round_num,
+            })
+            prev_messages.append({
+                "resident_name": resident["name"],
+                "message": message,
+            })
+
+            # Update resident state
+            update_resident_state(db_path, rid, focus=topic[:200], opinion=message[:200])
+            add_activity(db_path, rid, f"参与了关于'{topic[:50]}'的讨论", "discussion")
+
+    return results
+
+
+# ============================================================
+# Resident Do Work — 用户不在时居民各自做事
+# ============================================================
+
+async def resident_do_work(
+    db_path: Path,
+    resident_id: str,
+    task_description: str,
+    http_client_factory: Optional[Callable] = None,
+    get_api_cfg: Optional[Callable] = None,
+) -> Dict:
+    """让一个居民独立完成一项工作（Life Loop 调用）。
+    结果写入 activity_log，在晨报中显示。"""
+    resident = get_resident(db_path, resident_id)
+    if not resident:
+        return {"error": "resident not found"}
+
+    resident_prompt = build_resident_system_prompt(resident)
+
+    # Build context: shared cognitive context + task
+    context_parts = []
+    try:
+        from app import cognitive_kernel
+        cog_ctx = cognitive_kernel.build_cognitive_context(
+            db_path, user_id="default", query="", max_chars=800
+        )
+        if cog_ctx.get("combined"):
+            context_parts.append(cog_ctx["combined"])
+    except Exception:
+        pass
+
+    context_parts.append(f"\n你的任务：{task_description}")
+    context_parts.append(f"你是 {resident['name']}。完成这个任务，写一段简短的成果汇报（100-200 字）。")
+
+    user_msg = "\n".join(context_parts)
+
+    # Call LLM
+    result = ""
+    if http_client_factory and get_api_cfg:
+        try:
+            api_cfg = get_api_cfg()
+            llm_overrides = resident.get("llm_config", {})
+            model = llm_overrides.get("model") or api_cfg.get("api_model", "")
+            import httpx
+            async with http_client_factory(timeout=60.0) as client:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": resident_prompt or f"你是 {resident['name']}。"},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "temperature": 0.6, "max_tokens": 500,
+                    "stream": False, "enable_thinking": False,
+                }
+                resp = await client.post(
+                    f"{api_cfg['api_base_url']}/chat/completions",
+                    json=payload,
+                    headers={"Authorization": f"Bearer {api_cfg['api_key']}",
+                             "Content-Type": "application/json"},
+                )
+                resp.raise_for_status()
+                result = resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            print(f"[work] {resident['name']} failed: {e}")
+            result = f"（工作失败：{e}）"
+    else:
+        result = f"（{resident['name']} 会完成这个任务，但 LLM 未配置）"
+
+    # Record activity
+    add_activity(db_path, resident_id, result, "work")
+    update_resident_state(db_path, resident_id, focus=task_description[:200])
+
+    return {
+        "resident_id": resident_id,
+        "resident_name": resident["name"],
+        "task": task_description,
+        "result": result,
+    }
+
+
 def get_stats(db_path: Path, user_id: str = "default") -> Dict:
     conn = safe_connect(db_path)
     conn.row_factory = sqlite3.Row
