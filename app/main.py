@@ -108,6 +108,8 @@ from app import greeting as greeting_mod
 from app import vector_store as vector_store_mod
 # Plugin SDK: extensible plugin system
 from app import plugin_sdk
+# Swarm Intelligence: multi-agent collaboration + self-goal generation
+from app import swarm as swarm_mod
 
 # ===== Configuration =====
 MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
@@ -5977,6 +5979,115 @@ async def vector_store_reindex_api():
         return {"reindexed": count, "backend": vs.backend}
     except Exception as e:
         raise HTTPException(500, f"reindex failed: {e}")
+
+
+# ============================================================
+# Swarm Intelligence — multi-agent collaboration
+# ============================================================
+@app.get("/api/swarm/tasks")
+async def swarm_tasks_list(status: str = "", limit: int = 50):
+    return {"items": swarm_mod.list_tasks(DB_PATH, "default", status=status or None, limit=limit)}
+
+@app.post("/api/swarm/tasks")
+async def swarm_tasks_create(payload: Dict):
+    task = swarm_mod.create_task(
+        DB_PATH, "default",
+        title=payload.get("title", "Untitled Task"),
+        description=payload.get("description", ""),
+        priority=payload.get("priority", 5),
+        tags=payload.get("tags", []),
+    )
+    return task
+
+@app.get("/api/swarm/tasks/{task_id}")
+async def swarm_tasks_get(task_id: str):
+    t = swarm_mod.get_task(DB_PATH, task_id)
+    if not t:
+        raise HTTPException(404, "task not found")
+    return t
+
+@app.post("/api/swarm/tasks/{task_id}/execute")
+async def swarm_tasks_execute(task_id: str):
+    """Execute a swarm task with multi-agent collaboration."""
+    result = await swarm_mod.execute_swarm_task(
+        DB_PATH, task_id,
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+    )
+    return result
+
+@app.get("/api/swarm/tasks/{task_id}/messages")
+async def swarm_messages_get(task_id: str):
+    return {"items": swarm_mod.get_messages(DB_PATH, task_id)}
+
+@app.delete("/api/swarm/tasks/{task_id}")
+async def swarm_tasks_delete(task_id: str):
+    if not swarm_mod.delete_task(DB_PATH, task_id):
+        raise HTTPException(404, "task not found")
+    return {"ok": True}
+
+@app.get("/api/swarm/stats")
+async def swarm_stats_api():
+    return swarm_mod.get_stats(DB_PATH, "default")
+
+
+# ============================================================
+# Self-Goal Generation — AI proactively proposes goals
+# ============================================================
+@app.get("/api/self-goals")
+async def self_goals_list(status: str = "", limit: int = 50):
+    return {"items": swarm_mod.list_self_goals(DB_PATH, "default", status=status or None, limit=limit)}
+
+@app.post("/api/self-goals")
+async def self_goals_create(payload: Dict):
+    return swarm_mod.create_self_goal(
+        DB_PATH, "default",
+        title=payload.get("title", ""),
+        description=payload.get("description", ""),
+        reasoning=payload.get("reasoning", ""),
+        evidence=payload.get("evidence", ""),
+        proposed_actions=payload.get("proposed_actions", []),
+        risk_assessment=payload.get("risk_assessment", ""),
+        confidence=payload.get("confidence", 0.5),
+        category=payload.get("category", "general"),
+    )
+
+@app.post("/api/self-goals/generate")
+async def self_goals_generate():
+    """AI observes and generates proactive goal proposals."""
+    goals = await swarm_mod.generate_self_goals(
+        DB_PATH, "default",
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+    )
+    return {"generated": len(goals), "goals": goals}
+
+@app.post("/api/self-goals/{goal_id}/approve")
+async def self_goals_approve(goal_id: str):
+    """Approve a self-goal → creates a SwarmTask."""
+    goal = swarm_mod.approve_self_goal(DB_PATH, goal_id)
+    if not goal:
+        raise HTTPException(404, "goal not found")
+    # Create a swarm task from the approved goal
+    task = swarm_mod.create_task(
+        DB_PATH, "default",
+        title=goal["title"],
+        description=goal["description"],
+        created_by="self_goal",
+        priority=7,
+        tags=["self-goal", goal.get("category", "general")],
+    )
+    return {"goal": goal, "task": task}
+
+@app.post("/api/self-goals/{goal_id}/reject")
+async def self_goals_reject(goal_id: str):
+    if not swarm_mod.reject_self_goal(DB_PATH, goal_id):
+        raise HTTPException(404, "goal not found")
+    return {"ok": True}
+
+@app.get("/api/self-goals/stats")
+async def self_goals_stats_api():
+    return swarm_mod.get_self_goal_stats(DB_PATH, "default")
 
 
 if __name__ == "__main__":

@@ -304,6 +304,8 @@ class LifeLoop:
                 await self._generate_morning_letter()
                 await self._auto_discover()
                 await self._residents_do_daily_work()
+                # Self-goal generation — AI proactively proposes goals
+                await self._generate_self_goals()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -742,6 +744,22 @@ class LifeLoop:
                     pass
         except Exception as e:
             print(f"[life_loop] proactive check failed: {e}")
+
+    async def _generate_self_goals(self):
+        """Daily: AI observes patterns and generates proactive goal proposals.
+        User can approve/reject them in the UI."""
+        try:
+            from app import swarm
+            import httpx
+            goals = await swarm.generate_self_goals(
+                self.db_path, "default",
+                http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+                get_api_cfg=self.get_memory_api_cfg,
+            )
+            if goals:
+                print(f"[life_loop] generated {len(goals)} self-goals")
+        except Exception as e:
+            print(f"[life_loop] self-goal generation failed: {e}")
 
     async def _residents_do_daily_work(self):
         """每天，居民各自做自己的事。共享灵魂，独立当下。

@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 # Current schema version. Bump this when adding a migration.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -419,6 +419,84 @@ def _migrate_v7_to_v8(conn: sqlite3.Connection):
     conn.commit()
 
 
+def _migrate_v8_to_v9(conn: sqlite3.Connection):
+    """v8 → v9: Swarm Intelligence — multi-agent collaboration + self-goal generation.
+    
+    Agent society: tasks decomposed → assigned to residents → they collaborate visibly → deliver result.
+    Self-goal: AI observes patterns, generates proactive proposals, waits for user approval.
+    """
+    conn.executescript("""
+        -- ===== Swarm Tasks — multi-agent collaborative tasks =====
+        CREATE TABLE IF NOT EXISTS swarm_tasks (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL DEFAULT 'default',
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'pending',
+            -- pending/decomposing/assigned/executing/reviewing/completed/failed/cancelled
+            created_by TEXT NOT NULL DEFAULT 'user',
+            -- user/self_goal/resident
+            parent_task TEXT,
+            subtasks TEXT NOT NULL DEFAULT '[]',
+            -- JSON: [{id, title, assigned_to, status}]
+            result TEXT NOT NULL DEFAULT '',
+            priority INTEGER NOT NULL DEFAULT 5,
+            tags TEXT NOT NULL DEFAULT '[]',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            completed_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_swarm_status ON swarm_tasks(user_id, status);
+
+        -- ===== Swarm Messages — visible inter-agent communication =====
+        CREATE TABLE IF NOT EXISTS swarm_messages (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            from_resident TEXT NOT NULL,
+            -- resident name or 'user' or 'system'
+            to_resident TEXT NOT NULL DEFAULT 'all',
+            -- 'all' = broadcast, or specific resident name
+            message_type TEXT NOT NULL DEFAULT 'message',
+            -- message/proposal/objection/agreement/question/result/handoff
+            content TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            round INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (task_id) REFERENCES swarm_tasks(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_swarm_msg_task ON swarm_messages(task_id, created_at);
+
+        -- ===== Self Goals — AI-generated proactive goals =====
+        CREATE TABLE IF NOT EXISTS self_goals (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL DEFAULT 'default',
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            reasoning TEXT NOT NULL DEFAULT '',
+            -- why AI thinks this is worth doing
+            evidence TEXT NOT NULL DEFAULT '',
+            -- what data/patterns led to this proposal
+            proposed_actions TEXT NOT NULL DEFAULT '[]',
+            -- JSON: [{action, resident, estimated_time}]
+            risk_assessment TEXT NOT NULL DEFAULT '',
+            confidence REAL NOT NULL DEFAULT 0.5,
+            status TEXT NOT NULL DEFAULT 'proposed',
+            -- proposed/approved/rejected/executing/completed/expired
+            category TEXT NOT NULL DEFAULT 'general',
+            -- optimization/opportunity/warning/maintenance/creative
+            expires_at INTEGER,
+            -- when this proposal becomes irrelevant
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            approved_at INTEGER,
+            completed_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_self_goals_status ON self_goals(user_id, status);
+        CREATE INDEX IF NOT EXISTS idx_self_goals_category ON self_goals(user_id, category);
+    """)
+    conn.commit()
+
+
 # Migration registry: version → function
 _MIGRATIONS: Dict[int, Callable] = {
     1: _migrate_v0_to_v1,
@@ -429,6 +507,7 @@ _MIGRATIONS: Dict[int, Callable] = {
     6: _migrate_v5_to_v6,
     7: _migrate_v6_to_v7,
     8: _migrate_v7_to_v8,
+    9: _migrate_v8_to_v9,
 }
 
 
