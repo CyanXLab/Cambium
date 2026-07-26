@@ -403,11 +403,19 @@ async def auto_update_profile_via_llm(db_path: Path, user_id: str, conv_text: st
             return {"updated": False, "reason": "invalid JSON", "raw": text[:200]}
         if not updates or not isinstance(updates, dict):
             return {"updated": False, "reason": "no updates"}
-        # Filter to only allowed fields
+        # Filter to only allowed fields + convert lists/dicts to JSON strings
         allowed = {"personality", "interests", "preferences", "relationships",
                    "communication_style", "emotional_patterns", "auto_summary"}
-        clean_updates = {k: str(v) if not isinstance(v, str) else v
-                         for k, v in updates.items() if k in allowed and v}
+        clean_updates = {}
+        for k, v in updates.items():
+            if k not in allowed:
+                continue
+            if v is None or v == "":
+                continue
+            if isinstance(v, (list, dict)):
+                clean_updates[k] = json.dumps(v, ensure_ascii=False)
+            else:
+                clean_updates[k] = str(v)
         if not clean_updates:
             return {"updated": False, "reason": "no valid fields"}
         update_user_profile(db_path, user_id, **clean_updates)

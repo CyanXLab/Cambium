@@ -1158,23 +1158,34 @@ async def extract_cognitive_updates(db_path: Path, *, user_id: str,
 
             for shift in result.get("identity_shifts", []):
                 if isinstance(shift, dict) and shift.get("description"):
-                    record_identity_shift(db_path, user_id=user_id,
-                        shift_type=shift.get("shift_type", "observation"),
-                        description=shift["description"],
-                        significance=int(shift.get("significance", 50)),
-                        source="reflection")
-                    applied["identity_shifts"] += 1
+                    try:
+                        sig_val = shift.get("significance", 50)
+                        try:
+                            sig = int(sig_val)
+                        except (ValueError, TypeError):
+                            sig = 50
+                        record_identity_shift(db_path, user_id=user_id,
+                            shift_type=str(shift.get("shift_type", "observation")),
+                            description=str(shift["description"]),
+                            significance=sig,
+                            source="reflection")
+                        applied["identity_shifts"] += 1
+                    except Exception as e:
+                        print(f"[cognitive] identity shift add failed: {e}")
 
             for ev in result.get("timeline_events", []):
                 if isinstance(ev, dict) and ev.get("title"):
-                    add_timeline_event(db_path, user_id=user_id,
-                        title=ev["title"],
-                        description=ev.get("description", ""),
-                        occurred_at=ev.get("occurred_at", ""),
-                        category=ev.get("category", "milestone"),
-                        significance=int(ev.get("significance", 50)),
-                        narrative=ev.get("narrative", ""))
-                    applied["timeline_events"] += 1
+                    try:
+                        add_timeline_event(db_path, user_id=user_id,
+                            title=str(ev["title"]),
+                            description=str(ev.get("description", "")),
+                            occurred_at=str(ev.get("occurred_at", "")),
+                            category=str(ev.get("category", "milestone")),
+                            significance=int(ev.get("significance", 50)) if str(ev.get("significance", "50")).isdigit() or str(ev.get("significance", "50")).replace(".","").isdigit() else 50,
+                            narrative=str(ev.get("narrative", "")))
+                        applied["timeline_events"] += 1
+                    except Exception as e:
+                        print(f"[cognitive] timeline event add failed: {e}")
 
             for n in result.get("narratives", []):
                 if isinstance(n, dict) and n.get("title") and n.get("story"):

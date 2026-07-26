@@ -1003,11 +1003,16 @@ async def run_reflection(db_path: Path, *, user_id: str = "default",
             if isinstance(nm, dict) and nm.get("content"):
                 r = add_memory(
                     db_path, user_id=user_id,
-                    content=nm["content"],
+                    content=str(nm["content"]),
                     importance=int(nm.get("importance", 50)),
-                    category=nm.get("category", "other"),
+                    category=str(nm.get("category", "other")),
                     source="reflection",
                 )
+                if r.get("action") in ("add", "update"):
+                    added.append(r)
+            elif isinstance(nm, str) and len(nm) > 5:
+                # LLM returned plain string instead of dict
+                r = add_memory(db_path, user_id=user_id, content=nm, importance=50, category="other", source="reflection")
                 if r.get("action") in ("add", "update"):
                     added.append(r)
 

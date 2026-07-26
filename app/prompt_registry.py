@@ -96,11 +96,64 @@ _PROMPT_REGISTRY: List[Dict] = [
 
     # ===== Reflection =====
     {
+        "key": "prompt_reflection",
+        "category": "reflection",
+        "label": "日度反思",
+        "description": "Life Loop 每日反思的指令（整体总结，非逐条）。",
+        "default_ref": None,
+        "default_text": """你是 Cambium 的反思系统。请根据以下最近的对话和记忆，生成一段反思。
+
+【最近对话】
+{conversation}
+
+【已有记忆】
+{memories}
+
+【任务】
+1. 总结这段对话中值得记住的关键信息。
+2. 提取关于用户的持久事实（身份、偏好、目标、技能等）。
+3. 如果有新的持久事实，输出 JSON 格式：
+```json
+{{"memories": [{{"content": "...", "importance": 80, "category": "preference"}}]}}
+```
+4. 如果没有值得记住的，输出空 JSON：`{{"memories": []}}`
+
+只输出 JSON，不要其他内容。""",
+    },
+    {
         "key": "prompt_reflection_tree",
         "category": "reflection",
         "label": "反思树（三层反思）",
         "description": "从观察中提炼高层洞察，再上升到元反思。",
         "default_ref": "reflection_tree.REFLECTION_PROMPT_DEFAULT",
+    },
+    {
+        "key": "prompt_meta_cognition",
+        "category": "reflection",
+        "label": "元认知自检",
+        "description": "每次回复后 AI 自检质量（信心度/矛盾/需澄清）的指令。",
+        "default_ref": None,
+        "default_text": """你是 Cambium 的元认知系统。对刚才的 AI 回复进行自检。
+
+【用户问题】
+{user_query}
+
+【AI 回复】
+{ai_response}
+
+【相关记忆】
+{relevant_memories}
+
+请评估：
+1. 信心度（0-1）：回复是否准确、完整？
+2. 是否有矛盾：回复是否与已知记忆冲突？
+3. 是否需要澄清：用户的问题是否有歧义？
+
+输出 JSON：
+```json
+{{"confidence": 0.85, "contradiction": false, "needs_clarification": false, "notes": ""}}
+```
+只输出 JSON。""",
     },
 
     # ===== Identity =====

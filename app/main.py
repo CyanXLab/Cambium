@@ -458,7 +458,7 @@ async def memory_edit_summary_via_llm(
             "messages": [
                 {
                     "role": "user",
-                    "content": MEMORY_EDIT_PROMPT.format(
+                    "content": get_prompt("prompt_memory_edit", MEMORY_EDIT_PROMPT_DEFAULT).format(
                         current_summary=current_summary or "(空)",
                         conversation=conv_text[:2500],
                     ),
@@ -2483,19 +2483,26 @@ async def chat_stream(req: ChatRequest):
                                 )
                         except Exception as e:
                             print(f"[emotion] record failed: {e}")
-                    # User profile auto-update (async, LLM-based)
+                    # User profile auto-update (async, LLM-based) — batched, NOT every turn
+                    # Only every 5 turns to save API calls and improve extraction quality
                     if all_settings.get("profile_auto_update", "true") != "false" and last_user_msg and full_content:
-                        async def _update_profile():
-                            try:
-                                conv_text = f"用户: {last_user_msg[:1000]}\n助手: {full_content[:1500]}"
-                                mem_cfg = get_memory_api_config()
-                                async with httpx.AsyncClient(timeout=30.0) as c:
-                                    await advanced_memory.auto_update_profile_via_llm(
-                                        DB_PATH, req.user_id, conv_text, c, mem_cfg
-                                    )
-                            except Exception as e:
-                                print(f"[profile] async update failed: {e}")
-                        asyncio.create_task(_update_profile())
+                        # Check turn count from settings (stored as counter)
+                        profile_turn_count = int(all_settings.get("_profile_turn_count", "0")) + 1
+                        if profile_turn_count >= 5:
+                            settings_set("_profile_turn_count", "0")
+                            async def _update_profile():
+                                try:
+                                    conv_text = f"用户: {last_user_msg[:1000]}\n助手: {full_content[:1500]}"
+                                    mem_cfg = get_memory_api_config()
+                                    async with httpx.AsyncClient(timeout=30.0) as c:
+                                        await advanced_memory.auto_update_profile_via_llm(
+                                            DB_PATH, req.user_id, conv_text, c, mem_cfg
+                                        )
+                                except Exception as e:
+                                    print(f"[profile] async update failed: {e}")
+                            asyncio.create_task(_update_profile())
+                        else:
+                            settings_set("_profile_turn_count", str(profile_turn_count))
                     # Chat vectorization (vectorize the new user + assistant messages)
                     if all_settings.get("chat_vectors_enabled", "true") != "false" and req.conversation_id:
                         async def _vectorize():
@@ -2552,33 +2559,36 @@ async def chat_stream(req: ChatRequest):
                             except Exception as e:
                                 print(f"[orchestrator] classify+store failed: {e}")
                         asyncio.create_task(_classify_and_store())
-                    # Meta-cognition: self-check the response (async, doesn't block)
+                    # Meta-cognition: self-check the response — batched, NOT every turn
+                    # Only every 5 turns to save API calls
                     if all_settings.get("emotional_resonance", "true") != "false" and last_user_msg and full_content:
-                        async def _meta_cog_check():
-                            try:
-                                mem_cfg = get_memory_api_config()
-                                # Gather relevant memories for contradiction check
-                                relevant = memory_orchestrator.retrieve_relevant(
-                                    DB_PATH, last_user_msg, user_id=req.user_id, top_k=3
-                                )
-                                rel_text = "\n".join(f"- {m['content']}" for m in relevant) if relevant else ""
-                                async with httpx.AsyncClient(timeout=20.0) as c:
-                                    eval_result = await meta_cognition.evaluate_response(
-                                        DB_PATH,
-                                        user_id=req.user_id,
-                                        conversation_id=req.conversation_id,
-                                        user_query=last_user_msg,
-                                        ai_response=full_content,
-                                        relevant_memories=rel_text,
-                                        http_client=c, api_cfg=mem_cfg,
+                        meta_cog_turn_count = int(all_settings.get("_meta_cog_turn_count", "0")) + 1
+                        if meta_cog_turn_count >= 5:
+                            settings_set("_meta_cog_turn_count", "0")
+                            async def _meta_cog_check():
+                                try:
+                                    mem_cfg = get_memory_api_config()
+                                    relevant = memory_orchestrator.retrieve_relevant(
+                                        DB_PATH, last_user_msg, user_id=req.user_id, top_k=3
                                     )
-                                # If low confidence or contradiction, we could emit a caveat
-                                # but since the response is already sent, we just log it.
-                                if eval_result.get("has_contradiction") or eval_result.get("confidence", 1.0) < 0.5:
-                                    print(f"[meta_cog] low confidence ({eval_result.get('confidence')}): {eval_result.get('self_check')}")
-                            except Exception as e:
-                                print(f"[meta_cog] check failed: {e}")
-                        asyncio.create_task(_meta_cog_check())
+                                    rel_text = "\n".join(f"- {m['content']}" for m in relevant) if relevant else ""
+                                    async with httpx.AsyncClient(timeout=20.0) as c:
+                                        eval_result = await meta_cognition.evaluate_response(
+                                            DB_PATH,
+                                            user_id=req.user_id,
+                                            conversation_id=req.conversation_id,
+                                            user_query=last_user_msg,
+                                            ai_response=full_content,
+                                            relevant_memories=rel_text,
+                                            http_client=c, api_cfg=mem_cfg,
+                                        )
+                                    if eval_result.get("has_contradiction") or eval_result.get("confidence", 1.0) < 0.5:
+                                        print(f"[meta_cog] low confidence ({eval_result.get('confidence')}): {eval_result.get('self_check')}")
+                                except Exception as e:
+                                    print(f"[meta_cog] check failed: {e}")
+                            asyncio.create_task(_meta_cog_check())
+                        else:
+                            settings_set("_meta_cog_turn_count", str(meta_cog_turn_count))
 
                 yield _sse("done", {"content": full_content})
         except httpx.ReadTimeout:
@@ -5610,7 +5620,8 @@ async def mornings_today():
 async def mornings_get(date_str: str):
     m = mornings_mod.get(DB_PATH, "default", date_str)
     if not m:
-        raise HTTPException(404, "no morning letter for that date")
+        # Return empty record instead of 404 — frontend handles empty letter
+        return mornings_mod.get_or_create(DB_PATH, "default", date_str)
     return m
 
 @app.get("/api/mornings/list")

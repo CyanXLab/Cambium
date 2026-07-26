@@ -1657,26 +1657,37 @@
       msgEl.classList.remove('streaming');
       appendToolbar(msgEl, assistantMsg, conv.messages.length - 1);
 
-      // Memory update: edit summary in-place (ChatGPT-style) by default.
-      // Falls back to atomic-fact extraction only when user explicitly enables
-      // memory_auto_extract AND disables memory_auto_summary.
+      // Memory update: accumulate and batch — NOT every turn.
+      // Only trigger memory edit after every 5 turns or 10 minutes since last update.
       if (state.settings.enable_memory && !state.temporary && assistantMsg.content) {
         const lastUser = conv.messages[conv.messages.length - 2];
         if (lastUser && lastUser.role === 'user') {
-          const convText = `用户: ${lastUser.content}\n助手: ${assistantMsg.content.slice(0, 1500)}`;
-          const useEdit = state.settings.memory_auto_summary !== false;
-          const endpoint = useEdit ? '/api/memory/edit' : '/api/memory/extract';
-          fetch(endpoint, {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ text: convText }),
-          }).then(r => r.json()).then(d => {
-            if (useEdit) {
-              if (d.changed) toast('记忆摘要已更新', 'success');
-            } else if (d.stored && d.stored.length > 0) {
-              toast(`已记住 ${d.stored.length} 条新事实`, 'success');
-            }
-          }).catch(e => console.warn('memory update failed', e));
+          // Track turn count and last memory update time
+          if (!state._memoryTurnCount) state._memoryTurnCount = 0;
+          if (!state._lastMemoryUpdate) state._lastMemoryUpdate = 0;
+          state._memoryTurnCount++;
+          const now = Date.now();
+          const turnsSinceLast = state._memoryTurnCount;
+          const timeSinceLast = (now - state._lastMemoryUpdate) / 1000; // seconds
+          // Trigger: every 5 turns OR every 10 minutes (600s)
+          const shouldUpdate = turnsSinceLast >= 5 || timeSinceLast >= 600;
+          if (shouldUpdate) {
+            // Gather recent conversation text (last 5 turns)
+            const recentMsgs = conv.messages.slice(-10);
+            const convText = recentMsgs.map(m =>
+              `${m.role === 'user' ? '用户' : '助手'}: ${m.content.slice(0, 500)}`
+            ).join('\n\n');
+            const useEdit = state.settings.memory_auto_summary !== false;
+            const endpoint = useEdit ? '/api/memory/edit' : '/api/memory/extract';
+            fetch(endpoint, {
+              method: 'POST',
+              headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ text: convText }),
+            }).then(r => r.json()).then(d => {
+              state._memoryTurnCount = 0;
+              state._lastMemoryUpdate = Date.now();
+            }).catch(e => console.warn('memory update failed', e));
+          }
         }
       }
 

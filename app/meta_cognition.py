@@ -113,7 +113,7 @@ async def evaluate_response(db_path: Path, *, user_id: str = "default",
     try:
         payload = {
             "model": api_cfg["api_model"],
-            "messages": [{"role": "user", "content": _get_prompt("prompt_meta_cognition", SELF_CHECK_PROMPT_DEFAULT).format(
+            "messages": [{"role": "user", "content": _get_prompt("prompt_meta_cognition", SELF_CHECK_PROMPT).format(
                 user_query=user_query[:500],
                 ai_response=ai_response[:2000],
                 relevant_memories=relevant_memories[:1000] or "(无)",
