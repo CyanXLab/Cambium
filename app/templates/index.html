@@ -26,7 +26,7 @@
   <!-- DOMPurify for safe HTML -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.11/purify.min.js" defer></script>
 
-  <link rel="stylesheet" href="/static/css/style.css?v=20260726v100" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260726v101" />
 </head>
 <body>
   <div class="app right-collapsed" id="app">
@@ -1714,12 +1714,12 @@
             <div class="settings-row">
               <div class="settings-label">
                 <div class="settings-title">添加 MCP 服务器</div>
-                <div class="settings-desc">名称 + 启动命令。例：open-webSearch · npx -y open-websearch@latest</div>
+                <div class="settings-desc">添加 MCP 服务器。支持本地命令（stdio）和远程服务器（HTTP/SSE URL）。默认搜索引擎为 Bing。</div>
               </div>
               <div style="display:flex; flex-direction:column; gap:8px; min-width:300px;">
                 <input type="text" id="mcpAddName" class="text-input" placeholder="服务器名称（如 web-search）" />
-                <input type="text" id="mcpAddCommand" class="text-input" placeholder="命令（如 npx -y open-websearch@latest）" />
-                <input type="text" id="mcpAddEnv" class="text-input" placeholder="环境变量（如 MODE=stdio,DEFAULT_SEARCH_ENGINE=duckduckgo）可选" />
+                <input type="text" id="mcpAddCommand" class="text-input" placeholder="命令或远程URL（如 npx -y open-websearch@latest 或 https://example.com/sse）" />
+                <input type="text" id="mcpAddEnv" class="text-input" placeholder="环境变量（如 DEFAULT_SEARCH_ENGINE=bing）可选" />
                 <button class="primary-btn" id="btnMcpAdd">添加</button>
               </div>
             </div>
@@ -2236,6 +2236,6 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=20260726v100"></script>
+  <script src="/static/js/app.js?v=20260726v101"></script>
 </body>
 </html>

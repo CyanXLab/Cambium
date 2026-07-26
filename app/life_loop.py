@@ -276,21 +276,32 @@ class LifeLoop:
                 print(f"[life_loop] hourly error: {e}")
 
     async def _daily_cycle(self):
-        """Daily: reflection + morning letter + discoveries + resident work."""
+        """Daily: 在固定时间（默认 8:00）执行。如果错过了当天的时间段，下次启动时由 catch-up 补上。
+        运行时每 5 分钟检查一次：如果今天还没执行过 daily 且当前时间 >= 8:00，就执行。"""
+        DAILY_HOUR = 8  # 固定每天 8:00 执行
         while self._running:
             try:
                 await asyncio.sleep(300)  # check every 5 minutes
                 now = int(time.time())
-                if now - self._last_run["daily"] < DAILY_INTERVAL:
-                    continue
+                from datetime import datetime
+                now_dt = datetime.now()
+                today_start = int(now_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+                daily_target = int(now_dt.replace(hour=DAILY_HOUR, minute=0, second=0, microsecond=0).timestamp())
+
+                # 检查：今天还没执行过 daily AND 当前时间 >= 目标时间
+                last_daily = self._last_run.get("daily", 0)
+                if last_daily >= today_start:
+                    continue  # 今天已经执行过了
+                if now < daily_target:
+                    continue  # 还没到 8:00，等
+
+                # 执行 daily
                 self._last_run["daily"] = now
                 self._save_last_runs()
+                print(f"[life_loop] daily cycle triggered at {now_dt.strftime('%H:%M')}")
                 await self._run_reflection("daily")
-                # Generate tomorrow's morning letter (or today's if not exists)
                 await self._generate_morning_letter()
-                # Auto-create discoveries from recent activity
                 await self._auto_discover()
-                # Residents do their own work (shared soul, independent present)
                 await self._residents_do_daily_work()
             except asyncio.CancelledError:
                 break
