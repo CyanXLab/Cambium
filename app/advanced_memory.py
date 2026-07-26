@@ -18,6 +18,7 @@ import json
 import re
 import sqlite3
 import time
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -376,7 +377,7 @@ async def auto_update_profile_via_llm(db_path: Path, user_id: str, conv_text: st
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         # Extract JSON from response (may be wrapped in ```json ... ```)
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if json_match:

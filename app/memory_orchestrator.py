@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -875,7 +876,7 @@ async def classify_importance_via_llm(content: str, context: str,
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
         if not m:
             return None
@@ -972,7 +973,7 @@ async def run_reflection(db_path: Path, *, user_id: str = "default",
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         # Extract JSON
         m = re.search(r"\{.*\}", text, re.DOTALL)
         if not m:
@@ -992,29 +993,49 @@ async def run_reflection(db_path: Path, *, user_id: str = "default",
             message_count=message_count,
         )
 
-        # Apply profile updates
+        # Apply profile updates — safely
         if result.get("profile_updates"):
-            from app.advanced_memory import update_user_profile
-            update_user_profile(db_path, user_id, **result["profile_updates"])
+            try:
+                from app.advanced_memory import update_user_profile
+                pu = result["profile_updates"]
+                if isinstance(pu, dict):
+                    # Convert all values to strings (DB expects TEXT)
+                    safe_pu = {}
+                    for k, v in pu.items():
+                        if v is None or v == "":
+                            continue
+                        if isinstance(v, (list, dict)):
+                            safe_pu[k] = json.dumps(v, ensure_ascii=False)
+                        else:
+                            safe_pu[k] = str(v)
+                    if safe_pu:
+                        update_user_profile(db_path, user_id, **safe_pu)
+            except Exception as e:
+                print(f"[reflection] profile update failed: {e}")
 
-        # Add new memories
+        # Add new memories — safely handle any format
         added = []
-        for nm in result.get("new_memories", []):
-            if isinstance(nm, dict) and nm.get("content"):
-                r = add_memory(
-                    db_path, user_id=user_id,
-                    content=str(nm["content"]),
-                    importance=int(nm.get("importance", 50)),
-                    category=str(nm.get("category", "other")),
-                    source="reflection",
-                )
-                if r.get("action") in ("add", "update"):
-                    added.append(r)
-            elif isinstance(nm, str) and len(nm) > 5:
-                # LLM returned plain string instead of dict
-                r = add_memory(db_path, user_id=user_id, content=nm, importance=50, category="other", source="reflection")
-                if r.get("action") in ("add", "update"):
-                    added.append(r)
+        new_mems = result.get("new_memories", [])
+        if not isinstance(new_mems, list):
+            new_mems = []
+        for nm in new_mems:
+            try:
+                if isinstance(nm, dict) and nm.get("content"):
+                    r = add_memory(
+                        db_path, user_id=user_id,
+                        content=str(nm["content"]),
+                        importance=int(nm.get("importance", 50) or 50),
+                        category=str(nm.get("category", "other") or "other"),
+                        source="reflection",
+                    )
+                    if r.get("action") in ("add", "update"):
+                        added.append(r)
+                elif isinstance(nm, str) and len(nm) > 5:
+                    r = add_memory(db_path, user_id=user_id, content=nm, importance=50, category="other", source="reflection")
+                    if r.get("action") in ("add", "update"):
+                        added.append(r)
+            except Exception as e:
+                print(f"[reflection] memory add failed: {e}")
 
         return {
             "success": True,

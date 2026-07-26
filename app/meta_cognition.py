@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -131,7 +132,7 @@ async def evaluate_response(db_path: Path, *, user_id: str = "default",
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
         if not m:
             return {"confidence": 0.7, "skipped": True, "reason": "no JSON"}

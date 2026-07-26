@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -1140,7 +1141,7 @@ async def extract_cognitive_updates(db_path: Path, *, user_id: str,
             )
             resp.raise_for_status()
             data = resp.json()
-            text = data["choices"][0]["message"]["content"].strip()
+            text = _extract_content(data)
             m = re.search(r"\{.*\}", text, re.DOTALL)
             if not m:
                 last_error = f"no JSON in response (attempt {attempt+1})"

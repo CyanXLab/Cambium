@@ -30,6 +30,7 @@ import sqlite3
 import hashlib
 from typing import Dict, List, Optional
 from pathlib import Path
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -238,7 +239,7 @@ async def build_reflection_level(db_path: Path, *, user_id: str = "default",
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         m = re.search(r"\[.*\]", text, re.DOTALL)
         if not m:
             return {"built": 0, "reason": "no JSON"}

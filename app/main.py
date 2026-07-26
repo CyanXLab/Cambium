@@ -22,6 +22,7 @@ from pathlib import Path
 from collections import Counter
 
 # Extended tooling: file ops, skills self-evolution, custom tools, sessions, cron
+from app.llm_utils import extract_content as _extract_content
 from app import tools_ext
 from app import sessions as sessions_mod
 from app import cron as cron_mod
@@ -480,7 +481,15 @@ async def memory_edit_summary_via_llm(
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        # Safe extraction — API may return unexpected structure
+        choices = data.get("choices") or []
+        if not choices:
+            print(f"[memory] edit summary: no choices in response")
+            return current_summary
+        message = choices[0].get("message") or {}
+        text = (message.get("content") or "").strip()
+        if not text:
+            return current_summary
         # Strip common meta-phrases the LLM might add
         for prefix in [
             "以下是更新后的摘要：",
@@ -553,7 +562,7 @@ async def extract_memories_via_llm(conv_text: str, http_client: httpx.AsyncClien
         )
         resp.raise_for_status()
         data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = _extract_content(data)
         if text == "NONE" or not text:
             return []
         lines = [l.strip() for l in text.split("\n") if l.strip() and l.strip() != "NONE"]
@@ -1113,7 +1122,7 @@ async def memory_summary_generate(http_client: httpx.AsyncClient, user_id: str =
         )
         resp.raise_for_status()
         data = resp.json()
-        summary = data["choices"][0]["message"]["content"].strip()
+        summary = _extract_content(data)
         memory_summary_set(summary, user_id)
         return summary
     except Exception as e:
@@ -2546,16 +2555,22 @@ async def chat_stream(req: ChatRequest):
                                         context=full_content[:500],
                                         http_client=c, api_cfg=mem_cfg,
                                     )
-                                if result and result.get("importance", 0) >= 21:
-                                    memory_orchestrator.add_memory(
-                                        DB_PATH,
-                                        user_id=req.user_id,
-                                        content=last_user_msg[:500],
-                                        importance=int(result["importance"]),
-                                        category=result.get("category", "other"),
-                                        source="auto",
-                                        conversation_id=req.conversation_id,
-                                    )
+                                if result and isinstance(result, dict):
+                                    imp = result.get("importance", 0)
+                                    try:
+                                        imp = int(imp)
+                                    except (ValueError, TypeError):
+                                        imp = 0
+                                    if imp >= 21:
+                                        memory_orchestrator.add_memory(
+                                            DB_PATH,
+                                            user_id=req.user_id,
+                                            content=last_user_msg[:500],
+                                            importance=imp,
+                                            category=str(result.get("category", "other") or "other"),
+                                            source="auto",
+                                            conversation_id=req.conversation_id,
+                                        )
                             except Exception as e:
                                 print(f"[orchestrator] classify+store failed: {e}")
                         asyncio.create_task(_classify_and_store())
@@ -3952,7 +3967,7 @@ async def compress_conversation(conv_messages: List[Dict], api_cfg: Dict,
             )
             resp.raise_for_status()
             data = resp.json()
-            summary = data["choices"][0]["message"]["content"].strip()
+            summary = _extract_content(data)
         return {
             "summary": summary,
             "kept_messages": to_keep,
@@ -5310,7 +5325,7 @@ async def journal_set_ai_draft(date_str: str, payload: Dict):
             )
             resp.raise_for_status()
             data = resp.json()
-            draft = data["choices"][0]["message"]["content"].strip()
+            draft = _extract_content(data)
         # 4. Emotion analysis (lightweight, separate call)
         emotion = "neutral"
         try:
@@ -5334,7 +5349,7 @@ async def journal_set_ai_draft(date_str: str, payload: Dict):
                              "Content-Type": "application/json"},
                 )
                 resp2.raise_for_status()
-                emotion = resp2.json()["choices"][0]["message"]["content"].strip().splitlines()[0][:30]
+                emotion = _extract_content(resp2.json()).splitlines()[0][:30]
         except Exception as e:
             print(f"[journal] emotion analysis failed: {e}")
         return journal_mod.set_ai_draft(

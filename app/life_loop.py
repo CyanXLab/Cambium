@@ -18,6 +18,7 @@ Self-contained module. main.py starts the loop on FastAPI startup.
 """
 import asyncio
 import json
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 import sqlite3
 import time
@@ -484,7 +485,7 @@ class LifeLoop:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                text = data["choices"][0]["message"]["content"].strip()
+                text = _extract_content(data)
                 m = re.search(r'\{[^{}]*\}', text, re.DOTALL)
                 if m:
                     try:

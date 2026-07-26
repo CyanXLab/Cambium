@@ -29,6 +29,7 @@ import asyncio
 from typing import Dict, List, Optional, Callable, Any
 from pathlib import Path
 
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -524,7 +525,7 @@ async def execute_resident(
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                output = data["choices"][0]["message"]["content"].strip()
+                output = _extract_content(data)
             transition_run(db_path, run_id, "completed", output=output)
             return get_run(db_path, run_id)
         except Exception as e:
@@ -985,7 +986,7 @@ async def resident_discuss(
                                      "Content-Type": "application/json"},
                         )
                         resp.raise_for_status()
-                        message = resp.json()["choices"][0]["message"]["content"].strip()
+                        message = _extract_content(resp.json())
                 except Exception as e:
                     print(f"[discuss] {resident['name']} LLM failed: {e}")
                     message = f"（{resident['name']} 暂时无法发言）"
@@ -1076,7 +1077,7 @@ async def resident_do_work(
                              "Content-Type": "application/json"},
                 )
                 resp.raise_for_status()
-                result = resp.json()["choices"][0]["message"]["content"].strip()
+                result = _extract_content(resp.json())
         except Exception as e:
             print(f"[work] {resident['name']} failed: {e}")
             result = f"（工作失败：{e}）"

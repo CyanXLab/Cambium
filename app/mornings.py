@@ -31,6 +31,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable
 from pathlib import Path
 
+from app.llm_utils import extract_content as _extract_content
 from app.db_utils import safe_connect
 
 
@@ -216,7 +217,7 @@ async def generate_letter(
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                letter_text = data["choices"][0]["message"]["content"].strip()
+                letter_text = _extract_content(data)
         except Exception as e:
             print(f"[mornings] LLM call failed: {e}")
             letter_text = f"早安。今早我想给你写一封信，但 LLM 调用失败了：{e}\n\n昨天的活动：{context.get('yesterday_summary', '无')}"
