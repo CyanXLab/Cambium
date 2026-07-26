@@ -26,7 +26,7 @@
   <!-- DOMPurify for safe HTML -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.11/purify.min.js" defer></script>
 
-  <link rel="stylesheet" href="/static/css/style.css?v=20260726v99" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260726v100" />
 </head>
 <body>
   <div class="app right-collapsed" id="app">
@@ -211,9 +211,31 @@
         </div>
       </nav>
 
-      <!-- History list — with pinned section -->
-      <div class="sidebar-history" id="historyList">
-        <div class="history-empty">暂无历史对话</div>
+      <!-- History toggle button — opens history as overlay panel -->
+      <button class="sidebar-history-toggle" id="btnHistoryToggle" title="历史对话">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 3v5h5"></path>
+          <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"></path>
+          <path d="M12 7v5l4 2"></path>
+        </svg>
+        <span>历史对话</span>
+        <span class="badge" id="historyBadge">0</span>
+      </button>
+
+      <!-- History overlay panel (hidden by default, shown on click) -->
+      <div class="sidebar-history-panel" id="historyPanel">
+        <div class="sidebar-history-panel-header">
+          <span class="sidebar-history-panel-title">历史对话</span>
+          <button class="sidebar-history-panel-close" id="btnHistoryClose" title="关闭">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="sidebar-history" id="historyList">
+          <div class="history-empty">暂无历史对话</div>
+        </div>
       </div>
 
       <!-- Footer -->
@@ -2214,6 +2236,6 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=20260726v99"></script>
+  <script src="/static/js/app.js?v=20260726v100"></script>
 </body>
 </html>

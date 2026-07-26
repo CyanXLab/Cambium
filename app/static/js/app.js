@@ -951,6 +951,10 @@
   // ===== History rendering =====
   function renderHistory() {
     el.historyList.innerHTML = '';
+    // Update badge count
+    const badge = document.getElementById('historyBadge');
+    const convCount = state.conversations.filter(c => !c.temporary).length;
+    if (badge) badge.textContent = convCount;
     if (state.conversations.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'history-empty';
@@ -2573,6 +2577,21 @@
       residentSelect.addEventListener('change', () => {
         state.resident = residentSelect.value || '';
         saveState();
+      });
+    }
+
+    // History panel toggle
+    const btnHistoryToggle = document.getElementById('btnHistoryToggle');
+    const btnHistoryClose = document.getElementById('btnHistoryClose');
+    const historyPanel = document.getElementById('historyPanel');
+    if (btnHistoryToggle) {
+      btnHistoryToggle.addEventListener('click', () => {
+        if (historyPanel) historyPanel.classList.toggle('open');
+      });
+    }
+    if (btnHistoryClose) {
+      btnHistoryClose.addEventListener('click', () => {
+        if (historyPanel) historyPanel.classList.remove('open');
       });
     }
     if (el.btnLibBack) el.btnLibBack.addEventListener('click', () => switchView('chat'));
