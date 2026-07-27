@@ -112,6 +112,10 @@ from app import plugin_sdk
 from app import swarm as swarm_mod
 # API Provider Manager: dynamic multi-provider management
 from app import api_providers
+# LangGraph integration: agent collaboration via state graphs
+from app import langgraph_integration
+# Universal Vector Indexer: index all valuable data
+from app import vector_indexer
 
 # ===== Configuration =====
 MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
@@ -6209,6 +6213,41 @@ async def providers_assignments_set(payload: Dict):
         raise HTTPException(400, "task required")
     api_providers.set_assignment(DB_PATH, task, provider_id)
     return {"ok": True}
+
+
+# ============================================================
+# Universal Vector Search — 跨所有集合搜索
+# ============================================================
+@app.post("/api/vector-search")
+async def universal_vector_search(payload: Dict):
+    """跨所有集合搜索（记忆/聊天/作品/原则/发现/日志/时间线/共同经历/自主目标）。"""
+    query = payload.get("query", "")
+    top_k = payload.get("top_k", 10)
+    collections = payload.get("collections")
+    if not query:
+        return {"results": []}
+    results = vector_indexer.universal_search(DB_PATH, query, top_k=top_k, collections=collections)
+    return {"results": results}
+
+@app.post("/api/vector-search/reindex-all")
+async def reindex_all_api():
+    """重新索引所有数据到向量库。"""
+    stats = vector_indexer.reindex_all(DB_PATH)
+    return {"reindexed": stats}
+
+
+# ============================================================
+# Swarm Task — use LangGraph execution
+# ============================================================
+@app.post("/api/swarm/tasks/{task_id}/execute-langgraph")
+async def swarm_tasks_execute_langgraph(task_id: str):
+    """用 LangGraph StateGraph 执行 Swarm Task。"""
+    result = await langgraph_integration.execute_swarm_via_langgraph(
+        DB_PATH, task_id,
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+    )
+    return result
 
 
 if __name__ == "__main__":
