@@ -2381,6 +2381,112 @@
 
     // Catch-up settings
     const catchupEnabled = $('#settingCatchupEnabled');
+
+    // ===== API Providers =====
+    async function loadProviders() {
+      const list = $('#providersList');
+      const assignDiv = $('#providerAssignments');
+      if (!list || !assignDiv) return;
+      try {
+        const [providersResp, assignResp] = await Promise.all([
+          fetch('/api/providers').then(r => r.json()),
+          fetch('/api/providers/assignments').then(r => r.json()),
+        ]);
+        const providers = providersResp.providers || [];
+        const assignments = assignResp.assignments || {};
+        const tasks = assignResp.tasks || [];
+
+        // Render provider list
+        if (providers.length === 0) {
+          list.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">还没有添加供应商。在下方添加第一个。</div>';
+        } else {
+          list.innerHTML = providers.map(p => `
+            <div class="inbox-item" style="padding:8px 12px;">
+              <div style="flex:1;">
+                <div style="font-weight:600;font-size:13px;">${escapeHtml(p.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${escapeHtml(p.base_url)} · ${p.models.length} 个模型</div>
+              </div>
+              <div class="inbox-item-actions">
+                <button class="ghost-btn" data-action="fetch-models" data-id="${p.id}" style="font-size:11px;padding:2px 8px;">获取模型</button>
+                <button class="danger" data-action="delete" data-id="${p.id}" style="font-size:11px;padding:2px 8px;">删除</button>
+              </div>
+            </div>`).join('');
+          list.querySelectorAll('button[data-action]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const id = btn.dataset.id;
+              const action = btn.dataset.action;
+              if (action === 'delete') {
+                if (!confirm('删除这个供应商？')) return;
+                await fetch(`/api/providers/${id}`, { method: 'DELETE' });
+                loadProviders();
+              } else if (action === 'fetch-models') {
+                btn.textContent = '获取中...';
+                try {
+                  const r = await fetch(`/api/providers/${id}/fetch-models`, { method: 'POST' }).then(r => r.json());
+                  if (r.models && r.models.length > 0) {
+                    toast(`获取到 ${r.models.length} 个模型`, 'success');
+                    loadProviders();
+                  } else {
+                    toast('获取失败: ' + (r.error || '无模型'), 'error');
+                  }
+                } catch (e) { toast('获取失败: ' + e, 'error'); }
+                btn.textContent = '获取模型';
+              }
+            });
+          });
+        }
+
+        // Render assignments
+        const providerOptions = '<option value="">使用主 API</option>' +
+          providers.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+        assignDiv.innerHTML = tasks.map(t => `
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+            <span style="flex:1;font-size:13px;">${escapeHtml(t.label)}</span>
+            <select class="select-input" data-task="${t.key}" style="max-width:200px;">${providerOptions}</select>
+          </div>`).join('');
+        assignDiv.querySelectorAll('select[data-task]').forEach(sel => {
+          sel.value = assignments[sel.dataset.task] || '';
+          sel.addEventListener('change', async () => {
+            await fetch('/api/providers/assignments', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ task: sel.dataset.task, provider_id: sel.value }),
+            });
+            toast('已保存', 'success');
+          });
+        });
+      } catch (e) {
+        console.error('loadProviders failed', e);
+      }
+    }
+    const btnProviderAdd = $('#btnProviderAdd');
+    if (btnProviderAdd) {
+      btnProviderAdd.addEventListener('click', async () => {
+        const name = ($('#providerAddName') || {}).value || '';
+        const url = ($('#providerAddUrl') || {}).value || '';
+        const key = ($('#providerAddKey') || {}).value || '';
+        const modelsStr = ($('#providerAddModels') || {}).value || '';
+        if (!name || !url) { toast('名称和地址不能为空', 'error'); return; }
+        const models = modelsStr ? modelsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+        try {
+          await fetch('/api/providers', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ name, base_url: url, api_key: key, models }),
+          });
+          ($('#providerAddName') || {}).value = '';
+          ($('#providerAddUrl') || {}).value = '';
+          ($('#providerAddKey') || {}).value = '';
+          ($('#providerAddModels') || {}).value = '';
+          toast('供应商已添加', 'success');
+          loadProviders();
+        } catch (e) { toast('添加失败: ' + e, 'error'); }
+      });
+    }
+    // Load providers when API tab is opened
+    const apiTabBtn = document.querySelector('[data-tab="api"]');
+    if (apiTabBtn) {
+      apiTabBtn.addEventListener('click', () => setTimeout(loadProviders, 200));
+    }
+
     const catchupStart = $('#settingCatchupStartHour');
     const catchupEnd = $('#settingCatchupEndHour');
     // Load current catchup settings

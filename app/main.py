@@ -110,6 +110,8 @@ from app import vector_store as vector_store_mod
 from app import plugin_sdk
 # Swarm Intelligence: multi-agent collaboration + self-goal generation
 from app import swarm as swarm_mod
+# API Provider Manager: dynamic multi-provider management
+from app import api_providers
 
 # ===== Configuration =====
 MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
@@ -6136,6 +6138,77 @@ async def self_goals_reject(goal_id: str):
 @app.get("/api/self-goals/stats")
 async def self_goals_stats_api():
     return swarm_mod.get_self_goal_stats(DB_PATH, "default")
+
+
+# ============================================================
+# API Providers — 动态多供应商管理
+# ============================================================
+@app.get("/api/providers")
+async def providers_list():
+    return {"providers": api_providers.get_providers(DB_PATH)}
+
+@app.post("/api/providers")
+async def providers_add(payload: Dict):
+    return api_providers.add_provider(
+        DB_PATH,
+        name=payload.get("name", ""),
+        base_url=payload.get("base_url", ""),
+        api_key=payload.get("api_key", ""),
+        models=payload.get("models", []),
+    )
+
+@app.post("/api/providers/{provider_id}")
+async def providers_update(provider_id: str, payload: Dict):
+    p = api_providers.update_provider(DB_PATH, provider_id, **payload)
+    if not p:
+        raise HTTPException(404, "provider not found")
+    return p
+
+@app.delete("/api/providers/{provider_id}")
+async def providers_delete(provider_id: str):
+    if not api_providers.delete_provider(DB_PATH, provider_id):
+        raise HTTPException(404, "provider not found")
+    return {"ok": True}
+
+@app.post("/api/providers/{provider_id}/fetch-models")
+async def providers_fetch_models(provider_id: str):
+    """从供应商 API 获取模型列表。"""
+    p = api_providers.get_provider(DB_PATH, provider_id)
+    if not p:
+        raise HTTPException(404, "provider not found")
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            resp = await c.get(
+                f"{p['base_url']}/models",
+                headers={"Authorization": f"Bearer {p['api_key']}"},
+            )
+            if resp.status_code != 200:
+                return {"models": [], "error": f"HTTP {resp.status_code}"}
+            data = resp.json()
+            models = [m.get("id", "") for m in data.get("data", [])]
+            # 保存模型列表
+            api_providers.update_provider(DB_PATH, provider_id, models=models)
+            return {"models": models}
+    except Exception as e:
+        return {"models": [], "error": str(e)}
+
+@app.get("/api/providers/assignments")
+async def providers_assignments_get():
+    return {
+        "assignments": api_providers.get_assignments(DB_PATH),
+        "tasks": api_providers.TASK_LIST,
+    }
+
+@app.post("/api/providers/assignments")
+async def providers_assignments_set(payload: Dict):
+    """设置功能使用哪个供应商。{task: provider_id}"""
+    task = payload.get("task", "")
+    provider_id = payload.get("provider_id", "")
+    if not task:
+        raise HTTPException(400, "task required")
+    api_providers.set_assignment(DB_PATH, task, provider_id)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

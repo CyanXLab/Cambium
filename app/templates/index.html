@@ -26,7 +26,7 @@
   <!-- DOMPurify for safe HTML -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.11/purify.min.js" defer></script>
 
-  <link rel="stylesheet" href="/static/css/style.css?v=20260727v102" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260727v103" />
 </head>
 <body>
   <div class="app right-collapsed" id="app">
@@ -1314,6 +1314,25 @@
               <select id="autoFetchSelect" class="select-input" style="max-width:300px;"></select>
               <button class="ghost-btn" id="btnApplyAutoFetch" style="margin-left:8px;">填入槽 1</button>
             </div>
+
+            <h3 class="settings-tab-title" style="margin-top:24px">API 供应商管理</h3>
+            <div class="settings-desc" style="margin-bottom:12px;">添加多个 API 供应商，然后为每个功能选择使用哪个供应商。未分配的功能使用主 API。</div>
+            <div id="providersList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+            <div class="settings-row" style="border:1px dashed var(--border-color);border-radius:8px;padding:12px;">
+              <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+                <input type="text" id="providerAddName" class="text-input" placeholder="备注名（如 OpenAI / DeepSeek / 本地 Ollama）" />
+                <input type="text" id="providerAddUrl" class="text-input" placeholder="API 地址（如 https://api.openai.com/v1）" />
+                <input type="password" id="providerAddKey" class="text-input" placeholder="API Key" />
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <input type="text" id="providerAddModels" class="text-input" placeholder="模型列表（逗号分隔，或添加后点获取）" style="flex:1;" />
+                  <button class="ghost-btn" id="btnProviderAdd" style="white-space:nowrap;">添加供应商</button>
+                </div>
+              </div>
+            </div>
+
+            <h3 class="settings-tab-title" style="margin-top:24px">功能分配</h3>
+            <div class="settings-desc" style="margin-bottom:12px;">为每个功能选择使用哪个 API 供应商。留空 = 使用主 API。</div>
+            <div id="providerAssignments" style="display:flex;flex-direction:column;gap:8px;"></div>
           </div>
 
           <div class="settings-tab" data-tab="personalization" style="display:none">
@@ -2235,6 +2254,6 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=20260727v102"></script>
+  <script src="/static/js/app.js?v=20260727v103"></script>
 </body>
 </html>
