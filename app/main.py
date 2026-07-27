@@ -2362,14 +2362,22 @@ async def chat_stream(req: ChatRequest):
 
     system_prompt = "\n\n".join(sys_parts)
 
-    # Model Router: route chat task to appropriate tier (premium for main chat)
+    # Model Router + API Provider: route chat task to appropriate provider
     try:
-        router = model_router.ModelRouter(all_settings)
-        api_cfg = router.to_api_cfg("chat")
-        tier_name = router.get_tier_name("chat")
+        # First check if a specific provider is assigned to 'chat' task
+        provider_cfg = api_providers.get_api_config_for_task(DB_PATH, "chat")
+        if provider_cfg and provider_cfg.get("api_base_url"):
+            api_cfg = provider_cfg
+            # Use selected model if set, otherwise use provider's first model
+            if not api_cfg.get("api_model"):
+                api_cfg["api_model"] = all_settings.get("selected_model") or all_settings.get("api_model") or MODELSCOPE_MODEL
+        else:
+            router = model_router.ModelRouter(all_settings)
+            api_cfg = router.to_api_cfg("chat")
+            tier_name = router.get_tier_name("chat")
         # Publish routing event for audit
         try:
-            await event_bus.publish("model.routed", {"task": "chat", "tier": tier_name, "model": api_cfg.get("api_model", "")})
+            await event_bus.publish("model.routed", {"task": "chat", "tier": tier_name if 'tier_name' in dir() else "provider", "model": api_cfg.get("api_model", "")})
         except Exception:
             pass
     except Exception as e:

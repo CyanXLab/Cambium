@@ -413,6 +413,12 @@ def add_timeline_event(db_path: Path, *, user_id: str = "default",
             pass  # no event loop
     except Exception:
         pass
+    # Auto-index to vector store
+    try:
+        from app.vector_indexer import index_timeline_event
+        index_timeline_event(db_path, eid, title, description, category)
+    except Exception:
+        pass
     return {"id": eid, "title": title, "occurred_at": occurred_at}
 
 

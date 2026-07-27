@@ -75,6 +75,12 @@ def create(
     conn.commit()
     conn.close()
     row["evidence_refs"] = evidence_refs or []
+    # Auto-index to vector store
+    try:
+        from app.vector_indexer import index_discovery
+        index_discovery(db_path, did, title, content, type_)
+    except Exception:
+        pass
     return row
 
 

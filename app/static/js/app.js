@@ -963,13 +963,32 @@
       return;
     }
     // Don't show temporary conversations in sidebar
-    const sorted = [...state.conversations].filter(c => !c.temporary).sort((a,b) => b.updatedAt - a.updatedAt);
+    const sorted = [...state.conversations].filter(c => !c.temporary).sort((a,b) => {
+      // Pinned conversations first
+      const aPinned = a.pinned ? 1 : 0;
+      const bPinned = b.pinned ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return b.updatedAt - a.updatedAt;
+    });
+    // Add pinned section
+    const pinned = sorted.filter(c => c.pinned);
+    if (pinned.length > 0) {
+      const pt = document.createElement('div');
+      pt.className = 'history-section-title history-pinned-label';
+      pt.textContent = '📌 置顶';
+      el.historyList.appendChild(pt);
+      pinned.forEach(c => {
+        const item = createHistoryItem(c, true);
+        el.historyList.appendChild(item);
+      });
+    }
+    const unpinned = sorted.filter(c => !c.pinned);
     const groups = { '今天': [], '昨天': [], '前 7 天': [], '更早': [] };
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const yesterdayStart = todayStart - 86400000;
     const weekStart = todayStart - 7 * 86400000;
-    sorted.forEach(c => {
+    unpinned.forEach(c => {
       if (c.updatedAt >= todayStart) groups['今天'].push(c);
       else if (c.updatedAt >= yesterdayStart) groups['昨天'].push(c);
       else if (c.updatedAt >= weekStart) groups['前 7 天'].push(c);
@@ -982,18 +1001,32 @@
       t.textContent = title;
       el.historyList.appendChild(t);
       convs.forEach(c => {
+        const item = createHistoryItem(c, false);
+        el.historyList.appendChild(item);
+      });
+    }
+  }
+
+  function createHistoryItem(c, isPinned) {
         const item = document.createElement('div');
-        item.className = 'history-item' + (c.id === state.currentId ? ' active' : '');
+        item.className = 'history-item' + (c.id === state.currentId ? ' active' : '') + (isPinned ? ' pinned' : '');
         item.dataset.id = c.id;
         item.innerHTML = `
           <span class="h-title">${escapeHtml(c.title || '新对话')}</span>
           <span class="h-actions">
+            <button class="h-action" data-action="pin" title="${isPinned ? '取消置顶' : '置顶'}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6m0 0l3.5-3.5M12 8l-3.5-3.5M12 8v14"/></svg></button>
             <button class="h-action" data-action="rename" title="重命名"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
             <button class="h-action" data-action="delete" title="删除"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg></button>
           </span>`;
         item.addEventListener('click', (e) => {
           if (e.target.closest('.h-action')) return;
           switchConversation(c.id);
+        });
+        item.querySelector('[data-action="pin"]').addEventListener('click', (e) => {
+          e.stopPropagation();
+          c.pinned = !c.pinned;
+          saveState();
+          renderHistory();
         });
         item.querySelector('[data-action="rename"]').addEventListener('click', (e) => {
           e.stopPropagation();

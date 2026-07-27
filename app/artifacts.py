@@ -87,6 +87,12 @@ def create(
     row["related_artifacts"] = related_artifacts or []
     row["tags"] = tags or []
     row["metadata"] = metadata or {}
+    # Auto-index to vector store
+    try:
+        from app.vector_indexer import index_artifact
+        index_artifact(db_path, aid, title, content, type_, tags)
+    except Exception:
+        pass
     return row
 
 

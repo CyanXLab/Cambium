@@ -153,6 +153,12 @@ def create(
     )
     conn.commit()
     conn.close()
+    # Auto-index to vector store
+    try:
+        from app.vector_indexer import index_philosophy
+        index_philosophy(db_path, pid, content, rationale, type_)
+    except Exception:
+        pass
     return row
 
 
