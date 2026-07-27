@@ -2863,6 +2863,25 @@
 
     // Philosophy view
     if (el.btnPhilosophyBack) el.btnPhilosophyBack.addEventListener('click', () => switchView('today'));
+
+    // Swarm view wiring
+    const btnSwarmBack = document.getElementById('btnSwarmBack');
+    const btnSwarmCreate = document.getElementById('btnSwarmCreate');
+    const btnSwarmGenerateGoals = document.getElementById('btnSwarmGenerateGoals');
+    if (btnSwarmBack) btnSwarmBack.addEventListener('click', () => switchView('today'));
+    if (btnSwarmCreate) btnSwarmCreate.addEventListener('click', createSwarmTask);
+    if (btnSwarmGenerateGoals) btnSwarmGenerateGoals.addEventListener('click', async () => {
+      btnSwarmGenerateGoals.disabled = true;
+      btnSwarmGenerateGoals.textContent = '生成中...';
+      try {
+        const r = await fetch('/api/self-goals/generate', { method: 'POST' }).then(r => r.json());
+        if (r.generated > 0) toast(`生成了 ${r.generated} 个目标提案`, 'success');
+        else toast('没有发现值得提议的目标', 'info');
+        loadSelfGoals();
+      } catch (e) { toast('生成失败: ' + e, 'error'); }
+      btnSwarmGenerateGoals.disabled = false;
+      btnSwarmGenerateGoals.textContent = '生成自主目标';
+    });
     if (el.btnPhilosophyNew) el.btnPhilosophyNew.addEventListener('click', openPhilosophyCreateModal);
     document.querySelectorAll('[data-phil-type]').forEach(item => {
       item.addEventListener('click', (e) => {
@@ -3168,6 +3187,8 @@
     if (el.residentsView) el.residentsView.style.display = (view === 'residents') ? '' : 'none';
     if (el.artifactsView) el.artifactsView.style.display = (view === 'artifacts') ? '' : 'none';
     if (el.philosophyView) el.philosophyView.style.display = (view === 'philosophy') ? '' : 'none';
+    const swarmView = document.getElementById('swarmView');
+    if (swarmView) swarmView.style.display = (view === 'swarm') ? '' : 'none';
     // Update nav active state
     el.navItems.forEach(item => {
       item.classList.toggle('active', item.dataset.view === view);
@@ -3183,6 +3204,7 @@
     if (view === 'residents') loadResidentsView();
     if (view === 'artifacts') loadArtifactsView();
     if (view === 'philosophy') loadPhilosophyView();
+    if (view === 'swarm') { loadSwarmTasks(); loadSelfGoals(); }
   }
 
   // ===== Right panel (chat index) =====

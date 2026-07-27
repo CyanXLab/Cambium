@@ -172,6 +172,13 @@
             <svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </div>
           <div class="nav-group-items">
+            <a class="nav-item" data-view="swarm">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m4.24-4.24l4.24-4.24m-12.72 0l4.24 4.24m4.24-4.24l4.24 4.24m-12.72 0l4.24-4.24"></path>
+              </svg>
+              <span>Swarm 协作</span>
+            </a>
             <a class="nav-item" data-view="sessions">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line>
@@ -1052,6 +1059,50 @@
       </header>
       <div class="philosophy-view" id="philosophyViewContainer">
         <div class="philosophy-empty">加载中...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===== Swarm Task view ===== -->
+  <div class="app" id="swarmView" style="display:none">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-iconbtn" id="btnSwarmBack" title="返回">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+        </button>
+        <div style="font-size:15px;font-weight:600;padding-left:8px;">Swarm 协作</div>
+      </div>
+      <div class="sidebar-section">
+        <div style="padding:8px 12px;color:var(--text-muted);font-size:12px;">
+          多 Agent 协作任务。Planner 分解 → 居民执行 → Critic 审查 → 交付结果。
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <button class="sidebar-newchat" id="btnSwarmCreate" title="创建新任务">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>新建任务</span>
+        </button>
+      </div>
+      <div class="sidebar-history" id="swarmTaskList"></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-model"><span class="model-name">Swarm Tasks</span></div>
+        <div class="topbar-actions">
+          <button class="topbar-btn" id="btnSwarmGenerateGoals" title="AI 自动生成目标提案">
+            <span>生成自主目标</span>
+          </button>
+        </div>
+      </header>
+      <div style="flex:1;overflow-y:auto;padding:24px;">
+        <div style="max-width:800px;margin:0 auto;">
+          <h3 style="margin-bottom:12px;">自主目标提案</h3>
+          <div id="selfGoalsList" style="margin-bottom:24px;"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -2254,6 +2305,7 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=20260727v103"></script>
+  <script src="/static/js/app.js?v=20260727v104"></script>
+  <script src="/static/js/modules/swarm.js?v=20260727v104"></script>
 </body>
 </html>
