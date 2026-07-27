@@ -2253,9 +2253,13 @@ async def chat_stream(req: ChatRequest):
     # 平台是基建，AI 是灵魂
 
     # 居民选择：自动根据消息内容选择，或使用用户指定的居民
-    # 一个 Cambium + 多个声音——共享认知内核，独立当下
+    # 有些对话是单个居民回复，有些是多个居民讨论后给出结果
+    # 判断逻辑：如果用户消息涉及复杂决策/争论/多角度分析 → 多居民讨论
+    #           否则 → 单居民或默认 Cambium
     selected_resident = None
     resident_prefix = ""
+    use_multi_resident_discussion = False
+    _pending_discussion = None
     if not req.temporary:
         try:
             last_user_msg = ""
@@ -2263,19 +2267,90 @@ async def chat_stream(req: ChatRequest):
                 if m.role == "user":
                     last_user_msg = m.content
                     break
-            selected_resident = residents_mod.select_resident_for_message(
-                DB_PATH, req.user_id or "default", last_user_msg, req.resident
-            )
-            if selected_resident:
-                resident_modifier = residents_mod.build_resident_system_prompt(selected_resident)
-                if resident_modifier:
-                    sys_parts.append(f"\n\n【当前居民视角】{resident_modifier}")
-                resident_prefix = residents_mod.build_resident_prefix(selected_resident)
-                # Update resident state
-                residents_mod.update_resident_state(
-                    DB_PATH, selected_resident["id"],
-                    focus=last_user_msg[:200] if last_user_msg else None,
+
+            # 检测是否需要多居民讨论
+            discussion_triggers = [
+                "讨论", "辩论", "争论", "对比", "权衡", "哪个更好", "怎么选",
+                "优缺点", "利弊", "多角度", "不同角度", "大家觉得", "你们觉得",
+                "讨论一下", "帮我分析", "从多个角度", "头脑风暴", "brainstorm",
+                "各方意见", "不同看法", "评价一下", "审查一下",
+            ]
+            msg_lower = last_user_msg.lower() if last_user_msg else ""
+            if any(trigger in msg_lower for trigger in discussion_triggers) and len(last_user_msg) > 15:
+                use_multi_resident_discussion = True
+                # 选 2-3 个居民参与讨论
+                active_residents = residents_mod.list_residents(DB_PATH, req.user_id or "default", status="active")
+                # 选 Planner + Critic + Historian（或任意 3 个非默认）
+                discussion_residents = [r for r in active_residents if r["role"] in ("planner", "critic", "historian", "architect")]
+                if len(discussion_residents) >= 2:
+                    discussion_residents = discussion_residents[:3]
+                else:
+                    discussion_residents = [r for r in active_residents if r["role"] not in ("general", "custom")][:3]
+
+                if discussion_residents and httpx:
+                    # 执行多居民讨论
+                    discussion_messages = []
+                    prev_context = ""
+                    for i, resident in enumerate(discussion_residents):
+                        try:
+                            resident_prompt = residents_mod.build_resident_system_prompt(resident)
+                            if i == 0:
+                                user_prompt = f"用户问：{last_user_msg}\n\n你是 {resident['name']}。先发表你的看法（2-3句话）。"
+                            else:
+                                user_prompt = f"用户问：{last_user_msg}\n\n之前其他居民说了：\n{prev_context}\n\n你是 {resident['name']}。你的观点是什么？可以同意、反对或补充。（2-3句话）"
+
+                            api_cfg_discuss = get_memory_api_config()
+                            async with httpx.AsyncClient(timeout=30.0) as c:
+                                payload = {
+                                    "model": api_cfg_discuss["api_model"],
+                                    "messages": [
+                                        {"role": "system", "content": resident_prompt or f"你是 {resident['name']}。"},
+                                        {"role": "user", "content": user_prompt},
+                                    ],
+                                    "temperature": 0.7, "max_tokens": 300,
+                                    "stream": False, "enable_thinking": False,
+                                }
+                                resp = await c.post(
+                                    f"{api_cfg_discuss['api_base_url']}/chat/completions",
+                                    json=payload,
+                                    headers={"Authorization": f"Bearer {api_cfg_discuss['api_key']}",
+                                             "Content-Type": "application/json"},
+                                )
+                                resp.raise_for_status()
+                                from app.llm_utils import extract_content
+                                msg_text = extract_content(resp.json())
+                            prefix = residents_mod.build_resident_prefix(resident)
+                            discussion_messages.append(f"{prefix}{msg_text}")
+                            prev_context += f"[{resident['name']}]: {msg_text}\n"
+                            # Update resident state
+                            residents_mod.update_resident_state(DB_PATH, resident["id"], focus=last_user_msg[:200], opinion=msg_text[:200])
+                        except Exception as e:
+                            print(f"[discussion] {resident['name']} failed: {e}")
+
+                    if discussion_messages:
+                        # Store discussion messages to yield inside event_generator
+                        _pending_discussion = discussion_messages
+                        # 然后用 Planner 综合讨论结果给最终回复
+                        final_prompt = f"用户问：{last_user_msg}\n\n讨论过程：\n" + "\n\n".join(discussion_messages) + "\n\n请综合以上讨论，给出最终回复。"
+                        # 替换用户消息为综合后的
+                        req.messages[-1].content = final_prompt
+                        # 不使用特定居民
+                        selected_resident = None
+                        resident_prefix = ""
+            else:
+                # 单居民模式
+                selected_resident = residents_mod.select_resident_for_message(
+                    DB_PATH, req.user_id or "default", last_user_msg, req.resident
                 )
+                if selected_resident:
+                    resident_modifier = residents_mod.build_resident_system_prompt(selected_resident)
+                    if resident_modifier:
+                        sys_parts.append(f"\n\n【当前居民视角】{resident_modifier}")
+                    resident_prefix = residents_mod.build_resident_prefix(selected_resident)
+                    residents_mod.update_resident_state(
+                        DB_PATH, selected_resident["id"],
+                        focus=last_user_msg[:200] if last_user_msg else None,
+                    )
         except Exception as e:
             print(f"[resident] selection failed: {e}")
 
@@ -2320,6 +2395,9 @@ async def chat_stream(req: ChatRequest):
 
     async def event_generator():
         try:
+            # Send pending discussion messages first (if any)
+            if _pending_discussion:
+                yield _sse("discussion", {"messages": _pending_discussion})
             # API rate limit: wait before sending request
             api_delay = float(all_settings.get("api_delay", "0") or "0")
             if api_delay > 0:

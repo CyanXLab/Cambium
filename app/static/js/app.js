@@ -1545,6 +1545,24 @@
             if (data.prefix) {
               contentEl.innerHTML = `<span class="resident-prefix">${escapeHtml(data.prefix)}</span>`;
             }
+          } else if (evType === 'discussion') {
+            // Multi-resident discussion — show each resident's message
+            const messages = data.messages || [];
+            if (messages.length > 0) {
+              contentEl.innerHTML = '<div class="discussion-panel"><div class="discussion-label">🗣️ 居民讨论</div></div>';
+              const panel = contentEl.querySelector('.discussion-panel');
+              for (const msg of messages) {
+                const msgEl = document.createElement('div');
+                msgEl.className = 'discussion-message';
+                msgEl.innerHTML = escapeHtml(msg).replace(/\n/g, '<br>');
+                panel.appendChild(msgEl);
+              }
+              const summaryEl = document.createElement('div');
+              summaryEl.className = 'discussion-summary';
+              summaryEl.textContent = '正在综合讨论结果...';
+              panel.appendChild(summaryEl);
+              scrollToBottom();
+            }
           } else if (evType === 'thinking' && thinkBody) {
             if (!thinkingStart) thinkingStart = Date.now();
             assistantMsg.reasoning += data.text || '';
@@ -3281,7 +3299,7 @@
   async function addMcpServer() {
     const name = (el.mcpAddName.value || '').trim();
     const command = (el.mcpAddCommand.value || '').trim();
-    const envStr = (el.mcpAddEnv.value || '').trim();
+    const envStr = (el.mcpAddEnv ? el.mcpAddEnv.value : '') || '';
     if (!name || !command) {
       toast('名称和命令不能为空', 'error');
       return;
@@ -3347,7 +3365,13 @@
           </div>
           ${result ? `<div class="skill-item-desc">${escapeHtml(result)}</div>` : ''}
           ${s.user_message ? `<div class="skill-item-desc" style="margin-top:6px; padding:6px 8px; background:rgba(255,255,255,0.03); border-radius:4px; font-size:12px;"><b>任务:</b> ${escapeHtml(s.user_message.slice(0, 300))}</div>` : ''}`;
-        item.querySelector('.skill-delete').addEventListener('click', async () => {
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', (e) => {
+          if (e.target.classList.contains('skill-delete')) return;
+          openSessionDetail(s.id, s);
+        });
+        item.querySelector('.skill-delete').addEventListener('click', async (e) => {
+          e.stopPropagation();
           if (!(await uiConfirm(`确认删除会话 ${s.title || s.id}？`))) return;
           await fetch(`/api/sessions/${s.id}`, { method: 'DELETE' });
           toast('已删除', 'success');
@@ -3357,6 +3381,32 @@
       }
     } catch (e) {
       el.sessionsList.innerHTML = `<div class="rag-empty">加载失败: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  async function openSessionDetail(sessionId, sessionData) {
+    try {
+      const resp = await fetch(`/api/sessions/${sessionId}`);
+      const s = resp.ok ? await resp.json() : sessionData;
+      const overlay = document.createElement('div');
+      overlay.className = 'generic-modal-overlay';
+      overlay.innerHTML = `
+        <div class="generic-modal" style="max-width:700px;max-height:80vh;overflow-y:auto;">
+          <div class="generic-modal-title">${escapeHtml(s.title || s.id || '会话详情')}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
+            ${s.status || ''} · ${s.model || ''} · ${s.id || sessionId}
+          </div>
+          ${s.user_message ? `<div style="margin-bottom:12px;"><b>任务:</b><br>${escapeHtml(s.user_message)}</div>` : ''}
+          ${s.assistant_result ? `<div style="margin-bottom:12px;"><b>结果:</b><br><div style="white-space:pre-wrap;">${escapeHtml(s.assistant_result)}</div></div>` : ''}
+          <div class="generic-modal-actions">
+            <button class="today-btn" id="closeSessionDetail">关闭</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#closeSessionDetail').addEventListener('click', () => overlay.remove());
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    } catch (e) {
+      toast('加载会话详情失败: ' + e, 'error');
     }
   }
 
@@ -4034,11 +4084,10 @@
   let inboxFilter = 'all';
   async function loadInboxList() {
     if (!el.inboxListContainer) return;
-    const params = new URLSearchParams();
-    if (inboxFilter !== 'all') params.set('status', inboxFilter);
-    params.set('limit', '100');
     try {
-      el.inboxListContainer.innerHTML = '<div class="inbox-empty">加载中...</div>';
+      const params = new URLSearchParams();
+      if (inboxFilter !== 'all') params.set('status', inboxFilter);
+      params.set('limit', '100');
       const resp = await fetch('/api/inbox/items?' + params.toString());
       const data = await resp.json();
       const items = data.items || [];

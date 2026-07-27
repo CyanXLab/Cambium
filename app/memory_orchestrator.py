@@ -190,8 +190,8 @@ def _layer_for_importance(importance: int) -> str:
         return "permanent"
     if importance >= 51:
         return "long_term"
-    if importance >= 21:
-        return "short_term"
+    if importance >= 30:
+        return "short_term"  # raised from 21 — 随口说的不应该轻易进记忆
     return "working"  # will be discarded
 
 
