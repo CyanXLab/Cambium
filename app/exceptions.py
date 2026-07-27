@@ -123,7 +123,7 @@ async def cambium_error_handler(request: Request, exc: CambiumError) -> JSONResp
             "status": exc.status_code,
             "path": str(request.url.path),
             "method": request.method,
-            "message": exc.message,
+            "error_message": exc.message,
         },
     )
     return error_response(exc.status_code, exc.error_code, exc.message, exc.details)

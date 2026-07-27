@@ -320,8 +320,105 @@ class TestV2AgentLoop:
         r = client.post("/api/v2/chat/agent", json={
             "messages": [{"role": "user", "content": "hello"}],
         })
-        # Should not be 404 (might be 200 or 500 due to no LLM)
+        # Should not be 404 (might be 200, 400, 422, 500, 502 due to no LLM)
         assert r.status_code != 404
+
+    def test_agent_capabilities_endpoint(self, test_client):
+        """The v2 agent capabilities endpoint should return config info."""
+        client, _ = test_client
+        r = client.get("/api/v2/agent/capabilities")
+        assert r.status_code == 200
+        data = r.json()
+        assert "permission_modes" in data
+        assert "plan" in data["permission_modes"]
+        assert "grow" in data["permission_modes"]
+        assert "autonomous" in data["permission_modes"]
+
+
+class TestV2SystemEndpoints:
+    """Test the v2 system endpoints (health, version, vector-store status)."""
+
+    def test_v2_health(self, test_client):
+        client, _ = test_client
+        r = client.get("/api/v2/health")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["status"] == "ok"
+        assert "version" in data
+
+    def test_v2_version(self, test_client):
+        client, _ = test_client
+        r = client.get("/api/v2/version")
+        assert r.status_code == 200
+        data = r.json()
+        assert "app_name" in data
+        assert "app_version" in data
+        assert "ai_name" in data
+
+    def test_v2_vector_store_status(self, test_client):
+        """Vector store status should report which embedding model is loaded."""
+        client, _ = test_client
+        r = client.get("/api/v2/vector-store/status")
+        assert r.status_code == 200
+        data = r.json()
+        assert "sentence_transformers_available" in data
+        assert "chromadb_available" in data
+        assert "default_model" in data
+        assert "loaded_model" in data
+        assert "current_backend" in data
+        assert "has_real_embeddings" in data
+        # install_hint should be present
+        assert "install_hint" in data
+
+    def test_v2_config(self, test_client):
+        """Config endpoint should return sanitized config (no API keys)."""
+        client, _ = test_client
+        r = client.get("/api/v2/config")
+        assert r.status_code == 200
+        data = r.json()
+        assert "app_name" in data
+        assert "chat" in data
+        assert "memory" in data
+        # Should NOT expose actual API keys
+        assert "api_key" not in data
+        assert "api" not in data  # sanitized
+
+
+class TestV2Governance:
+    """Test the v2 governance endpoints (SSGM)."""
+
+    def test_v2_governance_stats(self, test_client):
+        client, _ = test_client
+        r = client.get("/api/v2/governance/stats")
+        assert r.status_code == 200
+        data = r.json()
+        assert "quarantined" in data
+        assert "validated" in data
+        assert "rejected" in data
+        assert "promoted" in data
+
+    def test_v2_governance_audit_log(self, test_client):
+        client, _ = test_client
+        r = client.get("/api/v2/governance/audit")
+        assert r.status_code == 200
+        data = r.json()
+        assert "entries" in data
+
+    def test_v2_governance_quarantine_list(self, test_client):
+        client, _ = test_client
+        r = client.get("/api/v2/governance/quarantine")
+        assert r.status_code == 200
+        data = r.json()
+        assert "items" in data
+
+    def test_v2_governance_auto_validate(self, test_client):
+        """Auto-validate should run without error (may be no-op if queue empty)."""
+        client, _ = test_client
+        r = client.post("/api/v2/governance/auto-validate")
+        assert r.status_code == 200
+        data = r.json()
+        assert "auto_validated" in data
+        assert "auto_rejected" in data
 
 
 class TestMigrations:

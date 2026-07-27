@@ -159,7 +159,7 @@ SKILLS_ROOT.mkdir(exist_ok=True)
 PLUGINS_ROOT = PROJECT_ROOT / "plugins"
 PLUGINS_ROOT.mkdir(exist_ok=True)
 
-app = FastAPI(title="Cambium", version="2.0.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="Cambium", version="2.1.0", docs_url=None, redoc_url=None)
 
 # Register global exception handlers + request logging middleware
 try:
@@ -167,6 +167,14 @@ try:
     register_exception_handlers(app)
 except ImportError:
     pass
+
+# Register modular v2 routers (progressive migration from monolithic main.py)
+try:
+    from app.api import get_all_routers
+    for _router in get_all_routers():
+        app.include_router(_router)
+except ImportError as _e:
+    print(f"[main] v2 routers not loaded: {_e}")
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
@@ -2020,104 +2028,9 @@ async def generate_title(user_msg: str, http_client: httpx.AsyncClient) -> str:
 
 # ============================================================
 # v2: Agent Loop endpoint (CoALA + Claude Code inspired)
+# MOVED to app/api/agent_v2.py — registered via app.api.get_all_routers()
+# This stub kept for backward compatibility (old code may reference chat_agent_v2).
 # ============================================================
-@app.post("/api/v2/chat/agent")
-async def chat_agent_v2(req: ChatRequest):
-    """Agent Loop endpoint — CoALA decision cycle + Claude Code permissions.
-
-    This is the v2 chat endpoint that uses the AgentLoop class:
-      1. OBSERVE — get user message + history
-      2. RETRIEVE — query cognitive kernel + memory
-      3. REASON — LLM thinks with tools
-      4. ACT — execute tools (with permission gates)
-      5. LEARN — async cognitive update
-
-    Yields SSE events: tool_call, tool_result, respond, cognitive_update.
-
-    Falls back to legacy chat_stream if agent_loop is disabled or unavailable.
-    """
-    from app.config import get_config
-    config = get_config()
-    if not config.agent_loop.agent_loop_enabled:
-        return await chat_stream(req)
-
-    try:
-        from app.agent_loop_v2 import AgentLoop, AgentStep
-        from app.model_adapter import OpenAICompatibleAdapter
-        from app.tool_registry import ToolRegistry
-    except ImportError as exc:
-        # Fallback to legacy if v2 modules unavailable
-        return await chat_stream(req)
-
-    # Build adapter from current API config
-    s_all = settings_get_all()
-    api_cfg = get_api_config()
-    adapter = OpenAICompatibleAdapter(
-        base_url=api_cfg.get("api_base_url", ""),
-        api_key=api_cfg.get("api_key", ""),
-        model=api_cfg.get("api_model", ""),
-    )
-
-    # Build tool registry
-    reg = ToolRegistry(
-        workspace=WORKSPACE_DIR,
-        skills_dir=PROJECT_ROOT / ".skills",
-        custom_tools_dir=CUSTOM_TOOLS_DIR,
-        db_path=DB_PATH,
-        memory_search_fn=_memory_search_cb,
-        memory_add_fn=_memory_add_cb,
-        web_search_fn=lambda args: _web_search_via_mcp(args.get("query", "")),
-        sessions_spawn_fn=_sessions_spawn_sync,
-    )
-
-    # Build cognitive context
-    cog_ctx = ""
-    try:
-        from app import cognitive_kernel
-        ctx = cognitive_kernel.build_cognitive_context(
-            DB_PATH, query=req.messages[-1].get("content", "") if req.messages else "",
-            user_id=req.user_id, max_chars=3000,
-        )
-        cog_ctx = ctx.get("combined", "")
-    except Exception:
-        pass
-
-    # Convert ChatRequest to history
-    history = [{"role": m["role"], "content": m["content"]} for m in req.messages[:-1]] if req.messages else []
-
-    loop = AgentLoop(
-        db_path=DB_PATH,
-        adapter=adapter,
-        tools=reg,
-        permission_mode=config.agent_loop.agent_loop_permission_mode,
-        max_steps=config.agent_loop.agent_loop_max_steps,
-        max_context_chars=config.agent_loop.agent_loop_max_context_chars,
-    )
-
-    async def _stream():
-        import json as _json
-        try:
-            async for step in loop.run(
-                user_message=req.messages[-1]["content"] if req.messages else "",
-                session_id=getattr(req, "conversation_id", "") or "",
-                history=history,
-                cognitive_context=cog_ctx,
-            ):
-                event_data = {
-                    "type": step.step_type,
-                    "content": step.content,
-                    "tool_name": step.tool_name,
-                    "tool_args": step.tool_args,
-                    "tool_result": step.tool_result,
-                    "timestamp": step.timestamp,
-                }
-                yield f"data: {_json.dumps(event_data, ensure_ascii=False)}\n\n"
-                if step.step_type == "respond":
-                    break
-        except Exception as exc:
-            yield f"data: {_json.dumps({'type': 'error', 'content': str(exc)}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @app.post("/api/chat/stream")
@@ -6140,7 +6053,15 @@ async def plugins_create_example():
 @app.get("/api/vector-store/stats")
 async def vector_store_stats_api():
     vs = vector_store_mod.get_vector_store(DB_PATH)
+    # Support both .stats() (v2) and .get_stats() (v1)
+    if hasattr(vs, "stats"):
+        return vs.stats()
     return vs.get_stats()
+
+@app.get("/api/vector-store/status")
+async def vector_store_status_api():
+    """Get vector store backend status — shows which embedding model is loaded."""
+    return vector_store_mod.get_status()
 
 @app.post("/api/vector-store/reindex")
 async def vector_store_reindex_api():

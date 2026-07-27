@@ -1841,6 +1841,8 @@ _global_embedder: Optional[LocalEmbedder] = None
 
 
 def get_embedder() -> LocalEmbedder:
+    """Legacy embedder — prefer app.vector_store.embed_text for new code.
+    Kept for backward compatibility with tools that may import it."""
     global _global_embedder
     if _global_embedder is None:
         _global_embedder = LocalEmbedder(dim=512)
@@ -1848,4 +1850,15 @@ def get_embedder() -> LocalEmbedder:
 
 
 def embed_text(text: str) -> List[float]:
+    """Embed text using the best available backend.
+    Prefers sentence-transformers (via vector_store.embed_text),
+    falls back to the legacy LocalEmbedder (TF-IDF + hashing)."""
+    try:
+        from app.vector_store import embed_text as _st_embed
+        vec = _st_embed(text)
+        if vec is not None:
+            return vec
+    except Exception:
+        pass
+    # Fallback to legacy LocalEmbedder
     return get_embedder().embed(text)

@@ -16,8 +16,12 @@
   async function loadDashboardStats() {
     if (!el.dashboardStats) return;
     try {
-      const resp = await fetch('/api/memory-dashboard');
-      const data = await resp.json();
+      const [memResp, vsResp] = await Promise.all([
+        fetch('/api/memory-dashboard'),
+        fetch('/api/v2/vector-store/status').catch(() => null),
+      ]);
+      const data = await memResp.json();
+      const vs = vsResp ? await vsResp.json() : {};
       const o = data.orchestrator || {};
       const kg = data.knowledge_graph || {};
       const ep = data.episodes || {};
@@ -43,6 +47,19 @@
           <div style="font-size:24px; font-weight:600; color:${c.color}; margin-top:4px;">${c.value}</div>
         </div>
       `).join('');
+
+      // Vector store status banner
+      if (vs.current_backend) {
+        const statusColor = vs.has_real_embeddings ? '#10a37f' : '#f59e0b';
+        const statusText = vs.has_real_embeddings
+          ? `向量模型已加载: ${vs.loaded_model || 'unknown'}`
+          : `使用 ${vs.current_backend} (未加载真实向量模型)`;
+        const hint = vs.has_real_embeddings ? '' : ` · ${vs.install_hint || ''}`;
+        const banner = document.createElement('div');
+        banner.style.cssText = 'margin-top:12px; padding:10px 14px; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:var(--radius-md); font-size:13px;';
+        banner.innerHTML = `<span style="color:${statusColor};">●</span> <strong>向量检索后端:</strong> ${vs.current_backend} · <span style="color:${statusColor};">${statusText}</span>${hint}`;
+        el.dashboardStats.appendChild(banner);
+      }
     } catch (e) {
       el.dashboardStats.innerHTML = `<div class="rag-empty">加载失败: ${escapeHtml(e.message)}</div>`;
     }

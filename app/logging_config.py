@@ -44,6 +44,15 @@ class JSONFormatter(logging.Formatter):
       - extra: all keyword arguments
     """
 
+    # Reserved LogRecord attributes that should not be overwritten
+    _RESERVED = frozenset({
+        "name", "msg", "args", "levelname", "levelno", "pathname",
+        "filename", "module", "exc_info", "exc_text", "stack_info",
+        "lineno", "funcName", "created", "msecs", "relativeCreated",
+        "thread", "threadName", "processName", "process", "message",
+        "taskName",
+    })
+
     def format(self, record: logging.LogRecord) -> str:
         # Base fields
         log_entry: Dict[str, Any] = {
@@ -53,21 +62,16 @@ class JSONFormatter(logging.Formatter):
             "event": record.getMessage(),
         }
 
-        # Add extra fields from record
+        # Add extra fields from record (skip reserved)
         for key, value in record.__dict__.items():
-            if key not in (
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "message",
-                "taskName",
-            ):
-                # Skip non-serializable
-                try:
-                    json.dumps(value)
-                    log_entry[key] = value
-                except (TypeError, ValueError, OverflowError):
-                    log_entry[key] = repr(value)
+            if key in self._RESERVED:
+                continue
+            # Skip non-serializable
+            try:
+                json.dumps(value)
+                log_entry[key] = value
+            except (TypeError, ValueError, OverflowError):
+                log_entry[key] = repr(value)
 
         # Add exception info
         if record.exc_info:
@@ -86,17 +90,12 @@ class HumanFormatter(logging.Formatter):
         level = record.levelname.ljust(7)
         module = record.name.ljust(28)[:28]
 
-        # Extract extra fields
+        # Extract extra fields (skip reserved)
         extras = []
         for key, value in record.__dict__.items():
-            if key not in (
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "message",
-                "taskName",
-            ):
-                extras.append(f"{key}={value}")
+            if key in JSONFormatter._RESERVED:
+                continue
+            extras.append(f"{key}={value}")
 
         extra_str = "  ".join(extras) if extras else ""
         msg = record.getMessage()

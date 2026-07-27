@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌱 Cambium v2.0.0
+# 🌱 Cambium v2.1.0
 
 ### 个人 AI 的连续性引擎
 
@@ -10,7 +10,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-green.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-176%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-185%20passing-brightgreen.svg)](tests/)
 [![Schema](https://img.shields.io/badge/Schema-v9-orange.svg)](app/migrations.py)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-yellow.svg)](.github/workflows/ci.yml)
@@ -25,7 +25,9 @@
 
 模型会变。记忆会变成故事。身份会持续存在。
 
-Cambium 是一个开放的**连续性引擎**。它让任何 AI 拥有属于用户自己的身份、共同历史、成长轨迹和长期连续性。
+Cambium 是一个开放的**连续性引擎**——一个会陪伴用户几十年的个人 agent 协作平台。AI 会变，但 Cambium 依然懂你，越用越懂你。
+
+**这不是 chatbot**。这是一个有身份、有记忆、有居民、能协作、会反思的认知存在。
 
 ---
 
@@ -37,9 +39,49 @@ Continuity = Identity × Memory × Agency × Shared Experience × Reflection
 
 ---
 
-## v2.0.0 重大更新
+## v2.1.0 重大更新
 
-本版本基于源码审计 + 论文研究进行了全面升级：
+### 真实向量模型加载
+- ✅ **sentence-transformers 集成**（`paraphrase-multilingual-MiniLM-L12-v2`，384维中英文双语）
+- ✅ ChromaDB + sentence-transformers 双重后端，TF-IDF 仅作最后回退
+- ✅ 新端点 `/api/v2/vector-store/status` 显示当前加载的向量模型
+- ✅ 仪表盘显示向量模型状态（绿色=已加载真实模型，黄色=回退模式）
+- ✅ `app/tools_ext.py::embed_text` 重定向到 `vector_store.embed_text`
+
+### 模块化路由（main.py 拆分开始）
+- ✅ 新增 `app/api/` 目录，包含 3 个模块化路由：
+  - `app/api/system.py` — health/version/vector-store/config/debug/migrations
+  - `app/api/governance.py` — SSGM 记忆治理（quarantine/validate/promote/audit）
+  - `app/api/agent_v2.py` — Agent Loop v2 + capabilities
+- ✅ 20 个新 v2 端点，全部带 OpenAPI tags
+- ✅ main.py 中的重复 v2 端点已删除，改为 router 注册
+- ✅ 渐进式迁移路径：新端点放 `app/api/`，旧端点保留直到迁移完成
+
+### 移除 Docker 依赖
+- ❌ 删除 `Dockerfile`、`docker-compose.yml`
+- ✅ CI 不再构建 Docker 镜像
+- ✅ 项目聚焦本地个人使用（用户明确不需要 Docker）
+
+### 移除 .env 依赖
+- ✅ 所有 API 配置走前端设置页 UI（存储在 SQLite `settings` 表）
+- ✅ `.env.example` 仅保留可选的日志和 embedding 模型配置
+- ✅ 脚本不再依赖 .env 文件，配置全部在数据库
+
+### 用知名库替换自造轮子
+- ✅ `sentence-transformers`（替换自造 TF-IDF LocalEmbedder）
+- ✅ `chromadb`（向量存储标准库）
+- ✅ `pydantic-settings`（配置管理标准库）
+- ✅ `structlog` 风格的结构化日志（自实现，兼容 stdlib logging）
+- ✅ `httpx`（HTTP 客户端标准库，已使用）
+
+### 测试增强（176 → 185，+9）
+- ✅ v2 系统端点测试（health/version/vector-store-status/config）
+- ✅ v2 治理端点测试（stats/audit/quarantine/auto-validate）
+- ✅ Agent capabilities 端点测试
+
+---
+
+## v2.0.0 更新（前一版本）
 
 ### 新增基础设施
 - **Pydantic Settings 配置系统**（`app/config.py`）—— 类型安全、分层、可验证
@@ -67,18 +109,12 @@ Continuity = Identity × Memory × Agency × Shared Experience × Reflection
 
 ### 工程化
 - ✅ `pip install -e .` 修复（package discovery 配置）
-- ✅ Docker + docker-compose
-- ✅ GitHub Actions CI（Python 3.11/3.12 + Docker build）
+- ✅ GitHub Actions CI（Python 3.11/3.12 矩阵）
 - ✅ LICENSE (MIT) + CONTRIBUTING + CODE_OF_CONDUCT
 - ✅ 移除硬编码 API key + 不存在的模型名
 - ✅ 修复 `keepalive.sh` 硬编码路径
 - ✅ 修复 `asyncio.get_event_loop()` 废弃用法
 - ✅ 30 个 API 集成测试 + 12 个 LLM Mock 测试
-
-### 测试
-- **176 个测试全部通过**（原 134 + 新增 42）
-- API 集成测试：30 个（覆盖 health/settings/memory/cognitive/residents/artifacts/philosophy/backup/governance/migrations）
-- LLM Mock 测试：12 个（agent loop + memory governance + adaptive retrieval）
 
 ---
 
@@ -156,47 +192,48 @@ Continuity = Identity × Memory × Agency × Shared Experience × Reflection
 
 ## 快速开始
 
-### 方式 1：本地开发
+### 安装
 
 ```bash
 git clone https://github.com/CyanXLab/Cambium
 cd Cambium
-pip install -e ".[dev]"           # 基础安装（含开发工具）
-# 或 pip install -e ".[all]"      # 全功能安装（含 LangGraph/DSPy/AutoGen/ChromaDB）
+pip install -e ".[vector]"     # 基础安装（含向量模型 sentence-transformers）
+# 或 pip install -e ".[all]"   # 全功能（含 LangGraph/DSPy/AutoGen/ChromaDB）
+```
 
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入你的 MODELSCOPE_API_KEY 和 MODELSCOPE_MODEL
+### 启动
 
-# 启动
+```bash
 python -m uvicorn app.main:app --port 3000 --reload
 ```
 
 打开 http://localhost:3000
 
-### 方式 2：Docker
+### 配置 API
 
-```bash
-git clone https://github.com/CyanXLab/Cambium
-cd Cambium
+**所有 API 配置在前端设置页完成，不需要 .env 文件。**
 
-# 配置环境
-cp .env.example .env
-# 编辑 .env
+1. 打开 http://localhost:3000
+2. 点击右上角 ⚙️ 设置
+3. 在「API 配置」分区填入：
+   - API Key（你的 ModelScope / OpenAI / 其他兼容 API 的 key）
+   - API Base URL（如 `https://api-inference.modelscope.cn/v1`）
+   - API Model（如 `Qwen/Qwen3-235B-A22B-Instruct-2507`）
+4. 保存，立即生效
 
-# 启动
-docker-compose up -d
+配置存储在 SQLite 数据库的 `settings` 表，可随时修改、备份、迁移。
 
-# 查看日志
-docker-compose logs -f cambium
-```
+### 向量模型（可选但推荐）
 
-### 方式 3：脚本启动
+向量检索默认使用 ChromaDB + sentence-transformers：
+- 安装：`pip install sentence-transformers chromadb`
+- 默认模型：`paraphrase-multilingual-MiniLM-L12-v2`（384维，中英文双语）
+- 可通过环境变量 `CAMBIUM_EMBEDDING_MODEL` 覆盖
+- 仪表盘会显示当前加载的向量模型
 
-```bash
-./scripts/run.sh        # 前台运行
-./scripts/daemon.sh     # 守护进程
-```
+未安装时自动回退到 TF-IDF（仅关键词匹配，无语义理解）。
+
+---
 
 ---
 
@@ -281,13 +318,12 @@ Observe → Retrieve → Reason → Act → Learn
 | 语言 | Python 3.11+ |
 | Web | FastAPI + SSE (Server-Sent Events) |
 | 数据库 | SQLite WAL |
-| 向量 | ChromaDB / TF-IDF |
+| 向量 | sentence-transformers + ChromaDB（回退 TF-IDF）|
 | Agent | LangGraph StateGraph / AutoGen / Native |
-| 配置 | Pydantic Settings |
+| 配置 | Pydantic Settings（前端 UI 配置，无 .env 依赖）|
 | 日志 | 结构化 JSON / Human 格式 |
 | 测试 | pytest + pytest-asyncio + respx (LLM mock) |
-| 容器 | Docker + docker-compose |
-| CI | GitHub Actions |
+| CI | GitHub Actions（Python 3.11/3.12 矩阵）|
 
 ---
 
@@ -296,18 +332,24 @@ Observe → Retrieve → Reason → Act → Learn
 ```
 Cambium/
 ├── app/
-│   ├── main.py              # FastAPI app + 283 路由
-│   ├── config.py            # v2: Pydantic Settings
-│   ├── logging_config.py    # v2: 结构化日志
-│   ├── exceptions.py        # v2: 全局异常处理
-│   ├── lifespan.py          # v2: 现代 Lifespan
-│   ├── agent_loop_v2.py     # v2: CoALA + Claude Code Agent Loop
+│   ├── main.py              # FastAPI app + 旧路由（正在迁移）
+│   ├── config.py            # Pydantic Settings 配置系统
+│   ├── logging_config.py    # 结构化日志
+│   ├── exceptions.py        # 全局异常处理
+│   ├── lifespan.py          # 现代 Lifespan 管理
+│   ├── agent_loop_v2.py     # CoALA + Claude Code Agent Loop
+│   ├── api/                 # v2.1: 模块化路由（逐步迁移 main.py）
+│   │   ├── __init__.py      # Router registry
+│   │   ├── system.py        # health/version/vector-store/config
+│   │   ├── governance.py    # SSGM 记忆治理
+│   │   └── agent_v2.py      # Agent Loop v2 端点
 │   ├── cognitive_kernel.py  # 七支柱
 │   ├── memory_orchestrator.py # 四层记忆 (Mem0)
 │   ├── memory_governance.py # SSGM 治理
 │   ├── adaptive_retrieval.py # EvolveMem 自适应
 │   ├── reflection_tree.py   # Generative Agents 反思树
 │   ├── identity_consistency.py # Identity Layer 身份评估
+│   ├── vector_store.py      # sentence-transformers + ChromaDB
 │   ├── residents.py         # 7 居民
 │   ├── swarm.py             # Swarm Task
 │   ├── tools_ext.py         # 47 工具
@@ -316,28 +358,26 @@ Cambium/
 │   │   ├── app.js           # 核心逻辑
 │   │   └── modules/         # 27 个模块文件
 │   └── templates/index.html
-├── tests/                   # 176 个测试
+├── tests/                   # 185 个测试
 │   ├── test_cognitive_kernel.py
 │   ├── test_comprehensive.py
 │   ├── test_life_first_pivot.py
 │   ├── test_residents_pivot.py
-│   ├── test_api_integration.py  # v2: API 集成测试
-│   └── test_llm_mock.py         # v2: LLM Mock 测试
+│   ├── test_api_integration.py  # API 集成测试（含 v2 端点）
+│   └── test_llm_mock.py         # LLM Mock 测试
 ├── docs/
 │   ├── USAGE.md
-│   └── audit/               # v2: 源码审计文档
+│   └── audit/               # 源码审计文档
 │       ├── 01_FUNCTIONAL_SPEC.md
 │       ├── 02_IMPROVEMENT_ANALYSIS.md
 │       ├── 03_PROJECT_EVALUATION.md
 │       ├── 04_TESTING_REPORT.md
 │       └── 05_POST_FIX_REPORT.md
-├── .github/workflows/ci.yml # v2: GitHub Actions CI
-├── Dockerfile               # v2: Docker 支持
-├── docker-compose.yml       # v2: Docker Compose
-├── LICENSE                  # v2: MIT License
-├── CONTRIBUTING.md          # v2: 贡献指南
-├── CODE_OF_CONDUCT.md       # v2: 行为准则
-└── pyproject.toml           # v2: 修复 package discovery
+├── .github/workflows/ci.yml # GitHub Actions CI
+├── LICENSE                  # MIT License
+├── CONTRIBUTING.md          # 贡献指南
+├── CODE_OF_CONDUCT.md       # 行为准则
+└── pyproject.toml           # package discovery + 可选依赖
 ```
 
 ---

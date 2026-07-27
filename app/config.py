@@ -216,7 +216,7 @@ class AppConfig(BaseSettings):
 
     # App metadata
     app_name: str = "Cambium"
-    app_version: str = "2.0.0"
+    app_version: str = "2.1.0"
     ai_name: str = "Cambium"  # replaces hardcoded "CyanX AI"
     debug_mode: bool = False
 
