@@ -2,19 +2,24 @@
 Vector Store — semantic search with real embedding models.
 
 Backends (in priority order):
-  1. sentence-transformers + ChromaDB (production quality)
+  1. WebLLM (browser-side, Transformers.js)
+     - Default for personal use — no server install needed
+     - Model: Xenova/multilingual-e5-small (~200MB, Chinese+English)
+     - Runs in the browser via Web Worker
+     - Frontend computes embeddings, sends to backend for storage
+  2. API embedding (OpenAI-compatible /embeddings endpoint)
+     - When rag_embedding_provider=api in settings
+  3. sentence-transformers + ChromaDB (server-side)
      - Real multilingual embeddings (paraphrase-multilingual-MiniLM-L12-v2)
      - 384-dim dense vectors, semantic similarity
-     - Best for: Chinese + English mixed content
-  2. ChromaDB default embedder (all-MiniLM-L6-v2 via onnx)
+  4. ChromaDB default embedder (all-MiniLM-L6-v2 via onnx)
      - Decent English-only embeddings
-     - No extra deps beyond chromadb
-  3. TF-IDF fallback (keyword matching only)
+  5. TF-IDF fallback (keyword matching only)
      - Zero deps, but no semantic understanding
 
 The backend is auto-detected at startup and logged clearly.
-Install the best backend with:
-    pip install sentence-transformers chromadb
+For browser-side WebLLM (default), no server install needed.
+For server-side embeddings: pip install sentence-transformers chromadb
 """
 from __future__ import annotations
 import sqlite3

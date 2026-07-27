@@ -118,7 +118,7 @@
       subtask_api_base_url: '',
       subtask_api_model: '',
       max_subtasks: 3,
-      rag_embedding_provider: 'local',
+      rag_embedding_provider: 'webllm',
       rag_embedding_api_key: '',
       rag_embedding_api_base_url: '',
       rag_embedding_model: '',
@@ -652,7 +652,7 @@
       state.settings.subtask_api_base_url = s.subtask_api_base_url || '';
       state.settings.subtask_api_model = s.subtask_api_model || '';
       state.settings.max_subtasks = parseInt(s.max_subtasks || '3');
-      state.settings.rag_embedding_provider = s.rag_embedding_provider || 'local';
+      state.settings.rag_embedding_provider = s.rag_embedding_provider || 'webllm';
       state.settings.rag_embedding_api_key = s.rag_embedding_api_key || '';
       state.settings.rag_embedding_api_base_url = s.rag_embedding_api_base_url || '';
       state.settings.rag_embedding_model = s.rag_embedding_model || '';
@@ -2900,7 +2900,13 @@
     const btnSwarmCreate = document.getElementById('btnSwarmCreate');
     const btnSwarmGenerateGoals = document.getElementById('btnSwarmGenerateGoals');
     if (btnSwarmBack) btnSwarmBack.addEventListener('click', () => switchView('today'));
-    if (btnSwarmCreate) btnSwarmCreate.addEventListener('click', createSwarmTask);
+    // createSwarmTask is defined in modules/swarm.js (separate IIFE)
+    // Use window-scoped reference if available, otherwise inline fallback
+    if (btnSwarmCreate) btnSwarmCreate.addEventListener('click', () => {
+      if (typeof createSwarmTask === 'function') createSwarmTask();
+      else if (typeof window.createSwarmTask === 'function') window.createSwarmTask();
+      else toast('Swarm 功能加载中，请刷新页面', 'info');
+    });
     if (btnSwarmGenerateGoals) btnSwarmGenerateGoals.addEventListener('click', async () => {
       btnSwarmGenerateGoals.disabled = true;
       btnSwarmGenerateGoals.textContent = '生成中...';
@@ -3235,7 +3241,10 @@
     if (view === 'residents') loadResidentsView();
     if (view === 'artifacts') loadArtifactsView();
     if (view === 'philosophy') loadPhilosophyView();
-    if (view === 'swarm') { loadSwarmTasks(); loadSelfGoals(); }
+    if (view === 'swarm') {
+      if (typeof loadSwarmTasks === 'function') loadSwarmTasks();
+      if (typeof loadSelfGoals === 'function') loadSelfGoals();
+    }
   }
 
   // ===== Right panel (chat index) =====
@@ -4990,11 +4999,15 @@
   let currentPhilosophyTypeFilter = 'all';
   async function loadPhilosophyView() {
     if (!el.philosophyViewContainer) return;
+    // Show loading state immediately (prevents "black screen")
+    el.philosophyViewContainer.innerHTML = '<div class="philosophy-empty">加载中...</div>';
     try {
       const url = currentPhilosophyTypeFilter === 'all'
         ? '/api/philosophy'
         : `/api/philosophy?type=${currentPhilosophyTypeFilter}`;
-      const r = await fetch(url).then(r => r.json());
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const r = await resp.json();
       const items = r.items || [];
       if (items.length === 0) {
         el.philosophyViewContainer.innerHTML = '<div class="philosophy-empty">还没有原则。点击"新增"添加第一条。</div>';
@@ -5006,7 +5019,7 @@
             <div class="philosophy-card type-${p.type}">
               <div class="philosophy-card-head">
                 <span class="philosophy-card-type">${p.type}</span>
-                <span class="philosophy-card-confidence">${(p.confidence * 100).toFixed(0)}%</span>
+                <span class="philosophy-card-confidence">${((p.confidence || 0) * 100).toFixed(0)}%</span>
               </div>
               <div class="philosophy-card-content">${escapeHtml(p.content)}</div>
               ${p.rationale ? `<div class="philosophy-card-rationale">${escapeHtml(p.rationale)}</div>` : ''}
@@ -5031,6 +5044,7 @@
       });
     } catch (e) {
       console.error('loadPhilosophyView failed', e);
+      el.philosophyViewContainer.innerHTML = `<div class="philosophy-empty">加载失败: ${escapeHtml(e.message)}</div>`;
     }
   }
 

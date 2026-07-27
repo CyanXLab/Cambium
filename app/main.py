@@ -882,7 +882,7 @@ DEFAULT_SETTINGS = {
     "rag_api_key": "",
     "rag_api_base_url": "",
     "rag_api_model": "",
-    "rag_embedding_provider": "local",  # local | api
+    "rag_embedding_provider": "webllm",  # webllm | local | api | sentence
     "rag_embedding_api_key": "",
     "rag_embedding_api_base_url": "",
     "rag_embedding_model": "",
@@ -969,7 +969,28 @@ def settings_set(key: str, value: str):
 
 
 def get_api_config() -> Dict[str, str]:
-    """Get effective API config: settings override env vars."""
+    """Get effective API config: settings override env vars.
+
+    Priority:
+      1. Main API provider (from api_providers system)
+      2. Legacy settings (api_key/api_base_url/api_model)
+      3. Environment variables
+    """
+    # Try the new provider system first
+    try:
+        from app import api_providers
+        main_provider = api_providers.get_main_provider(DB_PATH)
+        if main_provider and main_provider.get("api_key"):
+            model = main_provider["models"][0] if main_provider.get("models") else ""
+            return {
+                "api_key": main_provider["api_key"],
+                "api_base_url": main_provider["base_url"],
+                "api_model": model,
+            }
+    except Exception:
+        pass
+
+    # Fall back to legacy settings
     s = settings_get_all()
     # Model priority: selected_model > first non-empty model slot > api_model > env default
     model = s.get("selected_model") or ""
@@ -1027,7 +1048,7 @@ def get_embedding_config() -> Dict[str, str]:
     """Get embedding API config for RAG vector search. Provider can be 'local' or 'api'."""
     s = settings_get_all()
     return {
-        "provider": s.get("rag_embedding_provider", "local"),
+        "provider": s.get("rag_embedding_provider", "webllm"),
         "api_key": s.get("rag_embedding_api_key", ""),
         "api_base_url": s.get("rag_embedding_api_base_url", ""),
         "model": s.get("rag_embedding_model", ""),
@@ -2037,6 +2058,14 @@ async def generate_title(user_msg: str, http_client: httpx.AsyncClient) -> str:
 async def chat_stream(req: ChatRequest):
     """SSE streaming chat with memory injection, personality, tools, and temporary mode.
     Also injects pushback (philosophy) + memory surfacing + cognitive context."""
+    # Validate API config first — fail fast with a helpful message
+    api_cfg = get_api_config()
+    if not api_cfg.get("api_key"):
+        async def _no_key_stream():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'API Key 未配置。请点击右上角 ⚙️ 设置，在「API 配置」中填入你的 API Key、Base URL 和模型名。'}, ensure_ascii=False)}\n\n"
+            yield "data: {\"type\": \"done\"}\n\n"
+        return StreamingResponse(_no_key_stream(), media_type="text/event-stream")
+
     all_settings = settings_get_all()
     base_sys = req.system_prompt or get_prompt("prompt_system", all_settings.get("system_prompt", DEFAULT_SYSTEM_PROMPT))
     user_persona = all_settings.get("user_persona", "")

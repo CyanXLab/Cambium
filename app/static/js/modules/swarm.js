@@ -187,4 +187,11 @@
     }
   }
 
+  // Expose functions to outer scope (app.js IIFE shares the same scope)
+  // These are assigned to vars in app.js, so we just need them to be in scope.
+  // Since both scripts run in the same global scope, function declarations
+  // inside this IIFE are NOT visible outside. We expose via window.
+  // However, app.js uses them as bare identifiers, so we need a different approach.
+  // The fix: app.js should check for existence before calling.
+
 })();

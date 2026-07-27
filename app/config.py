@@ -123,7 +123,7 @@ class RAGConfig(BaseModel):
     rag_api_key: str = ""
     rag_api_base_url: str = ""
     rag_api_model: str = ""
-    rag_embedding_provider: Literal["local", "api"] = "local"
+    rag_embedding_provider: Literal["webllm", "local", "api", "sentence"] = "webllm"
     rag_embedding_api_key: str = ""
     rag_embedding_api_base_url: str = ""
     rag_embedding_model: str = ""

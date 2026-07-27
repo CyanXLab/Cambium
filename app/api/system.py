@@ -92,6 +92,82 @@ async def vector_store_stats():
 
 
 # ============================================================
+# WebLLM embedding endpoints (browser-side embeddings)
+# ============================================================
+
+from pydantic import BaseModel
+from typing import List as TypingList, Optional as TypingOptional
+
+
+class WebLLMEmbedAdd(BaseModel):
+    """Add an item with a pre-computed embedding (from WebLLM frontend)."""
+    collection: str
+    id: str
+    text: str
+    embedding: TypingList[float]
+    metadata: dict = {}
+
+
+class WebLLMEmbedQuery(BaseModel):
+    """Query with a pre-computed embedding (from WebLLM frontend)."""
+    collection: str
+    embedding: TypingList[float]
+    top_k: int = 5
+    where: TypingOptional[dict] = None
+
+
+@router.post("/vector-store/webllm/add")
+async def webllm_add(req: WebLLMEmbedAdd):
+    """Add an item with a pre-computed embedding vector.
+
+    The frontend computes the embedding using Transformers.js (WebLLM),
+    then sends the vector here for storage in ChromaDB.
+    """
+    from app.vector_store import get_vector_store, CHROMA_AVAILABLE
+    if not CHROMA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ChromaDB not installed on server")
+    vs = get_vector_store(DB_PATH)
+    col = vs._get_collection(req.collection)
+    if not col:
+        raise HTTPException(status_code=500, detail="Failed to get collection")
+    try:
+        col.upsert(
+            ids=[req.id],
+            embeddings=[req.embedding],
+            documents=[req.text],
+            metadatas=[req.metadata],
+        )
+        return {"status": "ok", "id": req.id}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/vector-store/webllm/query")
+async def webllm_query(req: WebLLMEmbedQuery):
+    """Query a collection with a pre-computed embedding vector.
+
+    The frontend computes the query embedding using Transformers.js (WebLLM),
+    then sends the vector here for similarity search in ChromaDB.
+    """
+    from app.vector_store import get_vector_store, CHROMA_AVAILABLE
+    if not CHROMA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="ChromaDB not installed on server")
+    vs = get_vector_store(DB_PATH)
+    col = vs._get_collection(req.collection)
+    if not col:
+        raise HTTPException(status_code=500, detail="Failed to get collection")
+    try:
+        results = col.query(
+            query_embeddings=[req.embedding],
+            n_results=req.top_k,
+            where=req.where,
+        )
+        return {"results": vs._format_chroma_results(results)}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ============================================================
 # Migrations
 # ============================================================
 

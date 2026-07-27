@@ -1899,11 +1899,13 @@
             <div class="settings-row">
               <div class="settings-label">
                 <div class="settings-title">Embedding 提供方</div>
-                <div class="settings-desc">local = 内置 TF-IDF（零依赖，约 0MB）；api = 调用 OpenAI 兼容 embedding API</div>
+                <div class="settings-desc">webllm = 浏览器本地运行（Xenova/multilingual-e5-small，~200MB，中英文，推荐）；local = 内置 TF-IDF（零依赖）；api = 调用 OpenAI 兼容 embedding API；sentence = 服务器端 sentence-transformers</div>
               </div>
               <select id="settingRagEmbeddingProvider" class="select-input">
+                <option value="webllm">webllm（浏览器本地，~200MB，推荐）</option>
                 <option value="local">local（内置 TF-IDF）</option>
                 <option value="api">api（OpenAI 兼容）</option>
+                <option value="sentence">sentence（服务器端 sentence-transformers）</option>
               </select>
             </div>
             <div class="settings-row">
@@ -2305,7 +2307,8 @@
     </div>
   </div>
 
-  <script src="/static/js/app.js?v=20260727v106"></script>
-  <script src="/static/js/modules/swarm.js?v=20260727v106"></script>
+  <script src="/static/js/app.js?v=20260727v107"></script>
+  <script src="/static/js/modules/swarm.js?v=20260727v107"></script>
+  <script type="module" src="/static/js/modules/webllm.js?v=20260727v107"></script>
 </body>
 </html>
