@@ -145,13 +145,14 @@ textarea, input, button { line-height: inherit; }
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px;
+  padding: 2px 10px;
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 13px;
   text-decoration: none;
   transition: background var(--transition);
   margin-bottom: 0;
+  line-height: 1.6;
 }
 .nav-item:hover { background: var(--bg-sidebar-hover); }
 
@@ -2535,16 +2536,16 @@ textarea, input, button { line-height: inherit; }
 /* ============================================================
    Sidebar Nav Groups — 分类折叠
    ============================================================ */
-.nav-group { margin-bottom: 4px; }
+.nav-group { margin-bottom: 0; }
 .nav-group-title {
   font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.5px; color: var(--text-muted);
-  padding: 8px 12px 4px; opacity: 0.7;
+  padding: 4px 12px 2px; opacity: 0.7;
 }
 .nav-group-toggle {
   cursor: pointer; user-select: none; display: flex;
   align-items: center; justify-content: space-between;
-  padding: 6px 12px;
+  padding: 3px 12px;
 }
 .nav-group-toggle:hover { color: var(--text-primary); opacity: 1; }
 .nav-group-toggle .chev {

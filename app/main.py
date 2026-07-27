@@ -118,6 +118,8 @@ from app import langgraph_integration
 from app import vector_indexer
 # DSPy integration: signature-based AI calls + prompt optimization
 from app import dspy_integration
+# AutoGen integration: conversational multi-agent collaboration
+from app import autogen_integration
 
 # ===== Configuration =====
 MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
@@ -6253,6 +6255,16 @@ async def reindex_all_api():
 async def swarm_tasks_execute_langgraph(task_id: str):
     """用 LangGraph StateGraph 执行 Swarm Task。"""
     result = await langgraph_integration.execute_swarm_via_langgraph(
+        DB_PATH, task_id,
+        http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
+        get_api_cfg=get_memory_api_config,
+    )
+    return result
+
+@app.post("/api/swarm/tasks/{task_id}/execute-autogen")
+async def swarm_tasks_execute_autogen(task_id: str):
+    """用 AutoGen GroupChat 执行 Swarm Task。"""
+    result = await autogen_integration.run_autogen_swarm_task(
         DB_PATH, task_id,
         http_client_factory=lambda timeout: httpx.AsyncClient(timeout=timeout),
         get_api_cfg=get_memory_api_config,
