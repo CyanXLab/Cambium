@@ -36,12 +36,12 @@ from datetime import datetime, timezone, timedelta
 # ============================================================
 def _safe_resolve(workspace: Path, path: str) -> Path:
     """Resolve path relative to workspace and ensure it stays within sandbox.
-    Allows paths within workspace; rejects paths that escape via ../."""
+    Allows paths within workspace; rejects paths that escape via ../.
+    Also allows custom_tools/ and .skills/ directories (project root)."""
     p = Path(path).expanduser()
     if not p.is_absolute():
         p = workspace / path
     try:
-        # Resolve and check containment
         resolved = p.resolve() if p.exists() else p.absolute()
         ws_resolved = workspace.resolve()
         # Allow if resolved path is within workspace
@@ -50,8 +50,15 @@ def _safe_resolve(workspace: Path, path: str) -> Path:
             return resolved
         except ValueError:
             pass
+        # Also allow custom_tools/ directory (project root)
+        project_root = ws_resolved.parent  # workspace is <root>/workspace, so parent is <root>
+        custom_tools_dir = project_root / "custom_tools"
+        try:
+            resolved.relative_to(custom_tools_dir.resolve())
+            return resolved
+        except ValueError:
+            pass
         # Also allow if absolute path was explicitly given AND it's a known safe dir
-        # (e.g., user's home for read-only operations). For safety we restrict to workspace.
         raise PermissionError(f"Path '{path}' is outside workspace sandbox")
     except Exception:
         raise PermissionError(f"Cannot resolve path '{path}'")
@@ -886,10 +893,17 @@ def make_custom_tool_runner(custom_tools_dir: Path):
             return {"success": False, "error": "name must match [a-z0-9_-]+"}
         if not code:
             return {"success": False, "error": "code required"}
+        # Strip outer triple quotes if LLM wrapped the code in them
+        code = code.strip()
+        if code.startswith('"""') and code.endswith('"""'):
+            # Remove outer triple quotes
+            code = code[3:-3].strip()
+        elif code.startswith("'''") and code.endswith("'''"):
+            code = code[3:-3].strip()
         custom_tools_dir.mkdir(parents=True, exist_ok=True)
         tool_file = custom_tools_dir / f"{name}.py"
-        # Prepend docstring with description
-        if description:
+        # Prepend docstring with description if code doesn't already have one
+        if description and not code.startswith('"""'):
             code = f'"""\nCustom tool: {name}\n{description}\n"""\n\n' + code
         tool_file.write_text(code, encoding="utf-8")
         # Save metadata
@@ -1274,11 +1288,11 @@ def build_tool_definitions() -> List[Dict]:
         # === Custom tools (AI can write its own tools) ===
         {"type": "function", "function": {
             "name": "save_custom_tool",
-            "description": "保存一个自定义 Python 工具到 custom_tools/<name>.py。代码必须定义 run(args: dict) -> dict 函数。这是自进化的核心：AI 可以把反复使用的逻辑封装成工具，后续直接调用。工具名只能包含小写字母、数字、下划线、短横线。",
+            "description": "保存一个自定义 Python 工具到 custom_tools/<name>.py。代码必须定义 run(args: dict) -> dict 函数。这是自进化的核心：AI 可以把反复使用的逻辑封装成工具，后续直接调用。工具名只能包含小写字母、数字、下划线、短横线。注意：code 参数直接传 Python 源代码字符串，不要用三引号包裹整个代码。",
             "parameters": {"type": "object", "properties": {
-                "name": {"type": "string", "description": "工具名（如 'json_formatter'）"},
+                "name": {"type": "string", "description": "工具名（如 'json_formatter'），只能小写字母数字下划线短横线"},
                 "description": {"type": "string", "description": "工具描述"},
-                "code": {"type": "string", "description": "Python 代码，必须定义 run(args) 函数"}
+                "code": {"type": "string", "description": "Python 源代码字符串。必须定义 def run(args): 函数。直接传代码文本，不要包裹在额外的三引号中。"}
             }, "required": ["name", "code"]},
         }},
         {"type": "function", "function": {

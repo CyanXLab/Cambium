@@ -824,20 +824,24 @@ def record_agreement(db_path: Path, resident_id: str):
 
 # Role → trigger keywords
 ROLE_KEYWORDS = {
-    "architect": ["架构", "结构", "设计", "系统", "模块", "依赖", "分层", "重构", "architecture", "structure", "design", "system", "module", "refactor"],
-    "researcher": ["研究", "调研", "论文", "查找", "搜索", "对比", "分析", "了解", "学习", "research", "paper", "study", "compare", "analyze"],
-    "writer": ["写", "文章", "文档", "readme", "故事", "小说", "文案", "草稿", "write", "document", "story", "draft"],
-    "planner": ["计划", "目标", "下一步", "安排", "优先", "进度", "plan", "goal", "next", "schedule", "priority"],
-    "historian": ["上次", "之前", "记得", "历史", "过去", "以前", "last time", "before", "remember", "history", "past"],
-    "critic": ["审查", "评估", "问题", "风险", "缺陷", "不足", "review", "critique", "problem", "risk", "flaw"],
-    "explorer": ["新", "尝试", "探索", "发现", "其他", "替代", "new", "try", "explore", "discover", "alternative"],
+    "architect": ["架构", "重构", "分层", "依赖关系", "模块化", "architecture", "refactor", "layered"],
+    "researcher": ["研究", "调研", "论文", "查找资料", "搜索文献", "对比分析", "research", "paper", "study"],
+    "writer": ["写文章", "写文档", "写readme", "写故事", "写小说", "写文案", "write article", "write document"],
+    "planner": ["制定计划", "设定目标", "安排日程", "优先级", "进度管理", "plan", "goal", "schedule"],
+    "historian": ["上次", "之前", "记得", "历史", "过去", "以前", "last time", "before", "remember"],
+    "critic": ["审查", "评估", "问题", "风险", "缺陷", "不足", "review", "critique", "problem", "risk"],
+    "explorer": ["探索", "发现新", "尝试新", "alternative", "explore"],
 }
+
+# Default resident (no role-specific keywords matched) — use Cambium itself
+DEFAULT_RESIDENT_ROLE = None  # None means use default Cambium voice, no prefix
 
 
 def auto_select_resident(db_path: Path, user_id: str, user_message: str) -> Optional[Dict]:
     """根据用户消息自动选择最合适的居民。
-    返回居民 dict 或 None（使用默认 Cambium 声音）。"""
-    if not user_message or len(user_message) < 5:
+    只有明确匹配到某个角色领域时才选择该居民，否则返回 None（默认 Cambium）。
+    避免常见词误触发。"""
+    if not user_message or len(user_message) < 10:
         return None
 
     msg_lower = user_message.lower()
@@ -845,25 +849,30 @@ def auto_select_resident(db_path: Path, user_id: str, user_message: str) -> Opti
     if not active_residents:
         return None
 
-    # Score each resident by keyword matches
+    # Score each resident by keyword matches — require at least 2 keyword matches
+    # or 1 long keyword (len > 3) to avoid false positives
     scored = []
     for r in active_residents:
         role = r["role"]
         if role == "general" or role == "custom":
             continue
         kws = ROLE_KEYWORDS.get(role, [])
-        score = 0
+        matches = []
         for kw in kws:
             if kw.lower() in msg_lower:
-                score += len(kw)
-        if score > 0:
-            scored.append((score, r))
+                matches.append(kw)
+        if matches:
+            # Score: number of matches * average keyword length
+            score = len(matches) * (sum(len(k) for k in matches) / max(len(matches), 1))
+            # Require minimum score or at least 1 match with len >= 2
+            if score >= 2 or len(matches) >= 1:
+                scored.append((score, r))
 
     if scored:
         scored.sort(key=lambda x: -x[0])
         return scored[0][1]
 
-    return None
+    return None  # Default: Cambium itself, no specific resident
 
 
 def build_resident_system_prompt(resident: Dict) -> str:
