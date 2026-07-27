@@ -208,13 +208,12 @@ def load_all_plugins(plugins_dir: Optional[Path] = None) -> Dict[str, Plugin]:
             try:
                 from app import event_bus
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        asyncio.create_task(event_bus.publish("plugin.loaded", {
-                            "name": plugin.name,
-                            "version": plugin.version,
-                            "tools": list(plugin.tools.keys()),
-                        }))
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(event_bus.publish("plugin.loaded", {
+                        "name": plugin.name,
+                        "version": plugin.version,
+                        "tools": list(plugin.tools.keys()),
+                    }))
                 except RuntimeError:
                     pass  # no event loop running
             except Exception:

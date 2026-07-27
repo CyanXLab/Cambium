@@ -223,3 +223,233 @@ def get_stats(db_path: Path, user_id: str = "default") -> Dict:
     ).fetchone()[0]
     conn.close()
     return stats
+
+
+# ============================================================
+# SSGM Enhancements: Contradiction detection + LLM validation + batch promotion
+# ============================================================
+
+# Negation pairs for lightweight contradiction detection
+_NEGATION_PAIRS = [
+    ("喜欢", "讨厌"), ("love", "hate"), ("prefer", "dislike"),
+    ("擅长", "不擅长"), ("good at", "bad at"),
+    ("总是", "从不"), ("always", "never"),
+    ("是", "不是"), ("is", "is not"), ("can", "cannot"),
+    ("应该", "不应该"), ("should", "should not"),
+    ("想要", "不想要"), ("want", "don't want"),
+]
+
+
+def detect_contradiction(db_path: Path, user_id: str, new_content: str) -> Optional[Dict]:
+    """Check if new content contradicts existing high-importance memories.
+
+    SSGM paper §3.2: "Contradiction detection is the first line of defense
+    against memory corruption."
+
+    Uses keyword overlap + negation detection as a lightweight proxy for
+    semantic contradiction. Returns the contradicting memory if found.
+    """
+    conn = safe_connect(db_path)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT id, content, importance FROM memory_items "
+        "WHERE user_id=? AND (layer='permanent' OR (layer='long_term' AND importance>=70)) "
+        "ORDER BY importance DESC LIMIT 50",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    new_lower = new_content.lower()
+    new_words = set(w for w in new_lower.split() if len(w) > 2)
+
+    for row in rows:
+        existing = row["content"].lower()
+        existing_words = set(w for w in existing.split() if len(w) > 2)
+
+        # High keyword overlap = talking about the same thing
+        overlap = len(new_words & existing_words) / max(len(new_words | existing_words), 1)
+        if overlap < 0.3:
+            continue
+
+        # Check for negation contradiction
+        for pos, neg in _NEGATION_PAIRS:
+            if (pos in new_lower and neg in existing) or (neg in new_lower and pos in existing):
+                return {"id": row["id"], "existing_content": row["content"]}
+
+    return None
+
+
+def quarantine_with_contradiction_check(
+    db_path: Path, *, user_id: str = "default", content: str,
+    category: str = "other", importance: int = 50,
+    source: str = "extraction", source_turn: str = "",
+    conversation_id: Optional[str] = None,
+) -> Dict:
+    """Quarantine a memory with automatic contradiction detection.
+
+    If the new memory contradicts existing high-importance memories,
+    its confidence is lowered and the contradiction is recorded.
+    """
+    contradiction = detect_contradiction(db_path, user_id, content)
+
+    qid = hashlib.sha1(f"{user_id}:{content[:50]}:{time.time()}".encode()).hexdigest()[:16]
+    now = int(time.time())
+    confidence = 0.5
+    if contradiction:
+        confidence = 0.2  # Lower confidence if it contradicts
+
+    conn = safe_connect(db_path)
+    conn.execute(
+        "INSERT INTO memory_quarantine (id, user_id, content, category, importance, source, "
+        "source_turn, conversation_id, created_at, status, confidence) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (qid, user_id, content, category, importance, source, source_turn[:200],
+         conversation_id, now, "quarantined", confidence)
+    )
+    audit_action = "quarantined"
+    if contradiction:
+        audit_action = "contradiction_detected"
+        conn.execute(
+            "INSERT INTO governance_audit (id, user_id, action, memory_id, memory_content, details, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (hashlib.sha1(f"audit:{qid}:{now}:c".encode()).hexdigest()[:16],
+             user_id, "contradiction_detected", qid, content[:200],
+             json.dumps({
+                 "source": source,
+                 "contradicts": contradiction["id"],
+                 "existing_content": contradiction["existing_content"][:200],
+             }, ensure_ascii=False), now)
+        )
+    else:
+        conn.execute(
+            "INSERT INTO governance_audit (id, user_id, action, memory_id, memory_content, details, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (hashlib.sha1(f"audit:{qid}:{now}".encode()).hexdigest()[:16],
+             user_id, "quarantined", qid, content[:200],
+             json.dumps({"source": source, "category": category}), now)
+        )
+    conn.commit()
+    conn.close()
+
+    return {
+        "id": qid,
+        "status": "quarantined",
+        "confidence": confidence,
+        "has_contradiction": bool(contradiction),
+        "contradicts": contradiction["id"] if contradiction else "",
+    }
+
+
+async def validate_quarantine_batch(
+    db_path: Path, *, user_id: str = "default",
+    http_client, api_cfg: Dict, batch_size: int = 10,
+) -> Dict:
+    """LLM-driven validation of quarantined memories (SSGM §3.3).
+
+    Asks the model: "Given what we already know, is this new memory plausible?"
+    This is coherence-checking, not just fact-checking.
+
+    Args:
+        http_client: httpx.AsyncClient instance
+        api_cfg: dict with api_model, api_base_url, api_key
+        batch_size: max memories to validate per call
+
+    Returns: {"validated": N, "rejected": N}
+    """
+    pending = get_quarantined(db_path, user_id=user_id, limit=batch_size)
+    if not pending:
+        return {"validated": 0, "rejected": 0}
+
+    # Get existing knowledge for context
+    from app import cognitive_kernel
+    identity = cognitive_kernel.get_identity(db_path, user_id)
+    existing_context = f"AI名字: {identity.get('name', 'Cambium')}\n"
+
+    validated = 0
+    rejected = 0
+
+    for mem in pending:
+        # Skip if already validated/rejected
+        if mem.get("status") != "quarantined":
+            continue
+
+        prompt = f"""你是 Cambium 的记忆治理系统。判断这条新提取的记忆是否可信。
+
+【已有知识】
+{existing_context}
+
+【新记忆】
+内容: {mem['content']}
+来源: {mem.get('source_turn', '')[:200] if mem.get('source_turn') else '(未知)'}
+重要度: {mem['importance']}
+
+【判断标准】
+1. 是否与已有知识矛盾？
+2. 是否可能是 LLM 幻觉（过度推断、编造细节）？
+3. 是否真的来自用户表达，还是 AI 自己的推测？
+
+输出 JSON:
+{{"verdict": "validate" 或 "reject", "confidence": 0.0-1.0, "reason": "..."}}
+只输出 JSON。"""
+
+        try:
+            import re
+            payload = {
+                "model": api_cfg["api_model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.1, "max_tokens": 200, "stream": False,
+            }
+            resp = await http_client.post(
+                f"{api_cfg['api_base_url']}/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {api_cfg['api_key']}"},
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+            m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+            if m:
+                result = json.loads(m.group(0))
+                verdict = result.get("verdict", "reject")
+                confidence = float(result.get("confidence", 0.5))
+            else:
+                verdict, confidence = "reject", 0.3
+        except Exception:
+            verdict, confidence = "reject", 0.3
+
+        new_status = "validated" if verdict == "validate" and confidence >= 0.6 else "rejected"
+
+        validate_quarantine(
+            db_path, mem["id"], verdict,
+            confidence=confidence, validated_by="llm",
+            notes=f"LLM validation: {verdict}",
+        )
+
+        if new_status == "validated":
+            validated += 1
+        else:
+            rejected += 1
+
+    return {"validated": validated, "rejected": rejected}
+
+
+def promote_all_validated(db_path: Path, *, user_id: str = "default") -> Dict:
+    """Promote all validated memories from quarantine to main store.
+
+    This is the ONLY path from quarantine to memory_items.
+    """
+    conn = safe_connect(db_path)
+    conn.row_factory = sqlite3.Row
+    validated = conn.execute(
+        "SELECT * FROM memory_quarantine WHERE user_id=? AND status='validated'",
+        (user_id,)
+    ).fetchall()
+    conn.close()
+
+    promoted = 0
+    for mem in validated:
+        result = promote_to_main(db_path, mem["id"])
+        if result:
+            promoted += 1
+
+    return {"promoted": promoted}

@@ -404,13 +404,20 @@ def add_timeline_event(db_path: Path, *, user_id: str = "default",
             "significance": significance, "occurred_at": occurred_ts or now,
         }
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(event_bus.publish("timeline.event", event_data))
-            else:
-                loop.run_until_complete(event_bus.publish("timeline.event", event_data))
-        except RuntimeError:
-            pass  # no event loop
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(event_bus.publish("timeline.event", event_data))
+            except RuntimeError:
+                # No running loop — fire-and-forget in new thread
+                import threading
+                def _publish():
+                    try:
+                        asyncio.run(event_bus.publish("timeline.event", event_data))
+                    except Exception:
+                        pass
+                threading.Thread(target=_publish, daemon=True).start()
+        except Exception:
+            pass  # best-effort
     except Exception:
         pass
     # Auto-index to vector store

@@ -1,6 +1,17 @@
 """
-My AI Chat — FastAPI backend
-Proxies ModelScope Qwen3.5-122B-A10B, plus a lightweight memory subsystem.
+Cambium — FastAPI backend for the Personal AI Continuity Engine.
+
+Provides:
+  - SSE streaming chat with cognitive context injection
+  - Four-layer memory system with governance (SSGM)
+  - Seven-pillar cognitive kernel (identity, timeline, narrative, growth, goals, world, self)
+  - Seven residents with independent state
+  - Swarm Task multi-agent collaboration
+  - Life Loop circadian rhythm
+  - Agent Loop v2 (CoALA + Claude Code inspired)
+  - 47+ tools with permission gates
+  - Plugin system (MCP-compatible)
+  - Vector search (ChromaDB / TF-IDF fallback)
 """
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
@@ -117,14 +128,16 @@ from app import langgraph_integration
 # Universal Vector Indexer: index all valuable data
 from app import vector_indexer
 # DSPy integration: signature-based AI calls + prompt optimization
-from app import dspy_integration
+# NOTE: dspy_integration is currently dead code (defined but never called).
+# Kept for future activation. To activate, wire DSPy signatures into prompt_registry.
+# from app import dspy_integration
 # AutoGen integration: conversational multi-agent collaboration
 from app import autogen_integration
 
 # ===== Configuration =====
-MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
+MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
 MODELSCOPE_BASE_URL = os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
-MODELSCOPE_MODEL = os.getenv("MODELSCOPE_MODEL", "Qwen/Qwen3.5-397B-A17B")
+MODELSCOPE_MODEL = os.getenv("MODELSCOPE_MODEL", "")
 
 BASE_DIR = Path(__file__).resolve().parent  # app/
 PROJECT_ROOT = BASE_DIR.parent  # project root (Cambium/)
@@ -146,7 +159,14 @@ SKILLS_ROOT.mkdir(exist_ok=True)
 PLUGINS_ROOT = PROJECT_ROOT / "plugins"
 PLUGINS_ROOT.mkdir(exist_ok=True)
 
-app = FastAPI(title="Cambium", docs_url=None, redoc_url=None)
+app = FastAPI(title="Cambium", version="2.0.0", docs_url=None, redoc_url=None)
+
+# Register global exception handlers + request logging middleware
+try:
+    from app.exceptions import register_exception_handlers
+    register_exception_handlers(app)
+except ImportError:
+    pass
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
@@ -828,8 +848,8 @@ DEFAULT_SETTINGS = {
     "api_base_url": "",
     "api_model": "",
     # Multi-model slots (5 slots, empty = not shown in dropdown)
-    "model_slot_1": "Qwen/Qwen3.5-397B-A17B",
-    "model_slot_2": "Qwen/Qwen3.5-122B-A10B",
+    "model_slot_1": "",
+    "model_slot_2": "",
     "model_slot_3": "",
     "model_slot_4": "",
     "model_slot_5": "",
@@ -1996,6 +2016,108 @@ async def generate_title(user_msg: str, http_client: httpx.AsyncClient) -> str:
         print(f"[title] generate failed: {e}")
         # Fallback: use first 20 chars of user message
         return user_msg[:20] + ("…" if len(user_msg) > 20 else "")
+
+
+# ============================================================
+# v2: Agent Loop endpoint (CoALA + Claude Code inspired)
+# ============================================================
+@app.post("/api/v2/chat/agent")
+async def chat_agent_v2(req: ChatRequest):
+    """Agent Loop endpoint — CoALA decision cycle + Claude Code permissions.
+
+    This is the v2 chat endpoint that uses the AgentLoop class:
+      1. OBSERVE — get user message + history
+      2. RETRIEVE — query cognitive kernel + memory
+      3. REASON — LLM thinks with tools
+      4. ACT — execute tools (with permission gates)
+      5. LEARN — async cognitive update
+
+    Yields SSE events: tool_call, tool_result, respond, cognitive_update.
+
+    Falls back to legacy chat_stream if agent_loop is disabled or unavailable.
+    """
+    from app.config import get_config
+    config = get_config()
+    if not config.agent_loop.agent_loop_enabled:
+        return await chat_stream(req)
+
+    try:
+        from app.agent_loop_v2 import AgentLoop, AgentStep
+        from app.model_adapter import OpenAICompatibleAdapter
+        from app.tool_registry import ToolRegistry
+    except ImportError as exc:
+        # Fallback to legacy if v2 modules unavailable
+        return await chat_stream(req)
+
+    # Build adapter from current API config
+    s_all = settings_get_all()
+    api_cfg = get_api_config()
+    adapter = OpenAICompatibleAdapter(
+        base_url=api_cfg.get("api_base_url", ""),
+        api_key=api_cfg.get("api_key", ""),
+        model=api_cfg.get("api_model", ""),
+    )
+
+    # Build tool registry
+    reg = ToolRegistry(
+        workspace=WORKSPACE_DIR,
+        skills_dir=PROJECT_ROOT / ".skills",
+        custom_tools_dir=CUSTOM_TOOLS_DIR,
+        db_path=DB_PATH,
+        memory_search_fn=_memory_search_cb,
+        memory_add_fn=_memory_add_cb,
+        web_search_fn=lambda args: _web_search_via_mcp(args.get("query", "")),
+        sessions_spawn_fn=_sessions_spawn_sync,
+    )
+
+    # Build cognitive context
+    cog_ctx = ""
+    try:
+        from app import cognitive_kernel
+        ctx = cognitive_kernel.build_cognitive_context(
+            DB_PATH, query=req.messages[-1].get("content", "") if req.messages else "",
+            user_id=req.user_id, max_chars=3000,
+        )
+        cog_ctx = ctx.get("combined", "")
+    except Exception:
+        pass
+
+    # Convert ChatRequest to history
+    history = [{"role": m["role"], "content": m["content"]} for m in req.messages[:-1]] if req.messages else []
+
+    loop = AgentLoop(
+        db_path=DB_PATH,
+        adapter=adapter,
+        tools=reg,
+        permission_mode=config.agent_loop.agent_loop_permission_mode,
+        max_steps=config.agent_loop.agent_loop_max_steps,
+        max_context_chars=config.agent_loop.agent_loop_max_context_chars,
+    )
+
+    async def _stream():
+        import json as _json
+        try:
+            async for step in loop.run(
+                user_message=req.messages[-1]["content"] if req.messages else "",
+                session_id=getattr(req, "conversation_id", "") or "",
+                history=history,
+                cognitive_context=cog_ctx,
+            ):
+                event_data = {
+                    "type": step.step_type,
+                    "content": step.content,
+                    "tool_name": step.tool_name,
+                    "tool_args": step.tool_args,
+                    "tool_result": step.tool_result,
+                    "timestamp": step.timestamp,
+                }
+                yield f"data: {_json.dumps(event_data, ensure_ascii=False)}\n\n"
+                if step.step_type == "respond":
+                    break
+        except Exception as exc:
+            yield f"data: {_json.dumps({'type': 'error', 'content': str(exc)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @app.post("/api/chat/stream")

@@ -77,9 +77,9 @@ class ModelRouter:
         # Premium: main model (always configured)
         # Fall back to env vars, then to Cambium defaults (hardcoded in main.py)
         import os
-        env_api_key = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
+        env_api_key = os.getenv("MODELSCOPE_API_KEY", "")
         env_base_url = os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
-        env_model = os.getenv("MODELSCOPE_MODEL", "Qwen/Qwen3.5-397B-A17B")
+        env_model = os.getenv("MODELSCOPE_MODEL", "")
         self._tiers["premium"] = ModelTier(
             name="premium",
             api_base_url=s.get("api_base_url") or env_base_url,

@@ -294,13 +294,20 @@ def add_memory(db_path: Path, *, user_id: str = "default", content: str,
             event_data = {"memory_id": mid, "user_id": user_id, "content": content[:200],
                           "importance": importance, "layer": layer, "category": category}
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(event_bus.publish("memory.added", event_data))
-                else:
-                    loop.run_until_complete(event_bus.publish("memory.added", event_data))
-            except RuntimeError:
-                pass  # no event loop
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(event_bus.publish("memory.added", event_data))
+                except RuntimeError:
+                    # No running loop — fire-and-forget in new thread
+                    import threading
+                    def _publish():
+                        try:
+                            asyncio.run(event_bus.publish("memory.added", event_data))
+                        except Exception:
+                            pass
+                    threading.Thread(target=_publish, daemon=True).start()
+            except Exception:
+                pass
         except Exception:
             pass
         return result

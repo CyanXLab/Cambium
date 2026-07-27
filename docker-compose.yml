@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  cambium:
+    build: .
+    container_name: cambium
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist data across container restarts
+      - cambium-data:/app/app/data
+      - cambium-workspace:/app/workspace
+      - cambium-skills:/app/.skills
+      - cambium-plugins:/app/plugins
+      # Load .env if present
+      - ./.env:/app/.env:ro
+    environment:
+      - CAMBIUM_LOG_LEVEL=${CAMBIUM_LOG_LEVEL:-INFO}
+      - CAMBIUM_LOG_FORMAT=${CAMBIUM_LOG_FORMAT:-json}
+      - MODELSCOPE_API_KEY=${MODELSCOPE_API_KEY:-}
+      - MODELSCOPE_BASE_URL=${MODELSCOPE_BASE_URL:-https://api-inference.modelscope.cn/v1}
+      - MODELSCOPE_MODEL=${MODELSCOPE_MODEL:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  cambium-data:
+  cambium-workspace:
+  cambium-skills:
+  cambium-plugins:
