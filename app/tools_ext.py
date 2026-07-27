@@ -1345,6 +1345,64 @@ def build_tool_definitions() -> List[Dict]:
                 "category": {"type": "string", "description": "identity/preference/goal/skill/relationship/other"}
             }, "required": ["content"]},
         }},
+        # === AI Server Control — AI can modify settings, config, database ===
+        {"type": "function", "function": {
+            "name": "get_setting",
+            "description": "读取一个设置项的值。",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string", "description": "设置键名（如 api_model, user_name, system_prompt）"}
+            }, "required": ["key"]},
+        }},
+        {"type": "function", "function": {
+            "name": "set_setting",
+            "description": "修改一个设置项的值。AI 可以修改任何设置，包括 API 配置、系统提示词、功能开关等。",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string", "description": "设置键名"},
+                "value": {"type": "string", "description": "设置值"}
+            }, "required": ["key", "value"]},
+        }},
+        {"type": "function", "function": {
+            "name": "list_settings",
+            "description": "列出所有设置项及其值。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        }},
+        {"type": "function", "function": {
+            "name": "db_query",
+            "description": "执行只读 SQL 查询（SELECT）。",
+            "parameters": {"type": "object", "properties": {
+                "sql": {"type": "string", "description": "SELECT SQL 语句"},
+                "limit": {"type": "integer", "description": "最大返回行数，默认 50"}
+            }, "required": ["sql"]},
+        }},
+        {"type": "function", "function": {
+            "name": "db_execute",
+            "description": "执行写操作 SQL（INSERT/UPDATE/DELETE）。谨慎使用。",
+            "parameters": {"type": "object", "properties": {
+                "sql": {"type": "string", "description": "SQL 语句"},
+                "params": {"type": "string", "description": "JSON 数组，SQL 参数（如 [\"value1\", 123]）"}
+            }, "required": ["sql"]},
+        }},
+        {"type": "function", "function": {
+            "name": "list_tables",
+            "description": "列出数据库中所有表名。",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        }},
+        {"type": "function", "function": {
+            "name": "describe_table",
+            "description": "查看表结构（列名和类型）。",
+            "parameters": {"type": "object", "properties": {
+                "table": {"type": "string", "description": "表名"}
+            }, "required": ["table"]},
+        }},
+        {"type": "function", "function": {
+            "name": "api_call",
+            "description": "调用 Cambium 的内部 API（如 /api/mornings/{date}/generate, /api/swarm/tasks/{id}/execute）。用于 AI 主动触发系统功能。",
+            "parameters": {"type": "object", "properties": {
+                "method": {"type": "string", "description": "HTTP 方法（GET/POST/DELETE）"},
+                "path": {"type": "string", "description": "API 路径（如 /api/life-loop/trigger）"},
+                "body": {"type": "string", "description": "JSON 请求体（可选）"}
+            }, "required": ["method", "path"]},
+        }},
     ]
 
 
@@ -1478,6 +1536,117 @@ def make_dispatcher(workspace: Path, skills_dir: Path, custom_tools_dir: Path,
                 if memory_add_fn:
                     return memory_add_fn(args)
                 return {"success": False, "error": "memory_add not configured"}
+            # === AI Server Control ===
+            if name == "get_setting":
+                try:
+                    from app.db_utils import safe_connect
+                    from app.main import DB_PATH
+                    conn = safe_connect(DB_PATH)
+                    row = conn.execute("SELECT value FROM settings WHERE key=?", (args.get("key",""),)).fetchone()
+                    conn.close()
+                    return {"success": True, "key": args.get("key",""), "value": row[0] if row else None}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "set_setting":
+                try:
+                    from app.main import settings_set, DB_PATH
+                    settings_set(args.get("key",""), args.get("value",""))
+                    return {"success": True, "key": args.get("key",""), "value": args.get("value","")}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "list_settings":
+                try:
+                    from app.main import settings_get_all
+                    return {"success": True, "settings": settings_get_all()}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "db_query":
+                try:
+                    from app.db_utils import safe_connect
+                    from app.main import DB_PATH
+                    sql = args.get("sql", "").strip()
+                    if not sql.upper().startswith("SELECT") and not sql.upper().startswith("PRAGMA"):
+                        return {"success": False, "error": "only SELECT/PRAGMA allowed"}
+                    limit = int(args.get("limit", 50))
+                    conn = safe_connect(DB_PATH)
+                    conn.row_factory = sqlite3.Row
+                    rows = conn.execute(sql).fetchall()
+                    conn.close()
+                    results = [dict(r) for r in rows[:limit]]
+                    return {"success": True, "rows": results, "count": len(results)}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "db_execute":
+                try:
+                    from app.db_utils import safe_connect
+                    from app.main import DB_PATH
+                    sql = args.get("sql", "").strip()
+                    params_str = args.get("params", "[]")
+                    params = json.loads(params_str) if params_str else []
+                    conn = safe_connect(DB_PATH)
+                    cur = conn.execute(sql, params)
+                    conn.commit()
+                    affected = cur.rowcount
+                    conn.close()
+                    return {"success": True, "affected": affected}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "list_tables":
+                try:
+                    from app.db_utils import safe_connect
+                    from app.main import DB_PATH
+                    conn = safe_connect(DB_PATH)
+                    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
+                    conn.close()
+                    return {"success": True, "tables": [r[0] for r in rows]}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "describe_table":
+                try:
+                    from app.db_utils import safe_connect
+                    from app.main import DB_PATH
+                    table = args.get("table", "")
+                    conn = safe_connect(DB_PATH)
+                    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    conn.close()
+                    columns = [{"name": r[1], "type": r[2], "notnull": r[3], "default": r[4]} for r in rows]
+                    return {"success": True, "table": table, "columns": columns}
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            if name == "api_call":
+                try:
+                    import httpx as _httpx
+                    method = args.get("method", "GET").upper()
+                    path = args.get("path", "")
+                    body = args.get("body", "")
+                    if not path:
+                        return {"success": False, "error": "path required"}
+                    url = f"http://127.0.0.1:{os.getenv('PORT', '3000')}{path}"
+                    async def _do_call():
+                        async with _httpx.AsyncClient(timeout=30.0) as c:
+                            if method == "GET":
+                                resp = await c.get(url)
+                            elif method == "POST":
+                                resp = await c.post(url, json=json.loads(body) if body else {})
+                            elif method == "DELETE":
+                                resp = await c.delete(url)
+                            else:
+                                return {"success": False, "error": f"method {method} not supported"}
+                            try:
+                                data = resp.json()
+                            except Exception:
+                                data = resp.text[:2000]
+                            return {"success": True, "status": resp.status_code, "data": data}
+                    # Run in thread since we're in sync context
+                    import concurrent.futures
+                    loop = asyncio.new_event_loop()
+                    try:
+                        result = loop.run_until_complete(_do_call())
+                    finally:
+                        loop.close()
+                    return result
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
             return {"success": False, "error": f"unknown tool: {name}"}
         except Exception as e:
             return {"success": False, "error": f"tool '{name}' crashed: {e}"}

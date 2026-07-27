@@ -216,6 +216,13 @@ def delete(db_path: Path, discovery_id: str) -> bool:
     conn.commit()
     ok = cur.rowcount > 0
     conn.close()
+    if ok:
+        try:
+            from app.vector_store import get_vector_store
+            vs = get_vector_store(db_path)
+            vs.delete("discoveries", id=discovery_id)
+        except Exception:
+            pass
     return ok
 
 

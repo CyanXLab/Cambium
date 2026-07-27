@@ -237,6 +237,14 @@ def delete(db_path: Path, artifact_id: str) -> bool:
     conn.commit()
     ok = cur.rowcount > 0
     conn.close()
+    # Sync delete to vector store
+    if ok:
+        try:
+            from app.vector_store import get_vector_store
+            vs = get_vector_store(db_path)
+            vs.delete("artifacts", id=artifact_id)
+        except Exception:
+            pass
     return ok
 
 
