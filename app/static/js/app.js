@@ -3558,21 +3558,81 @@
       const s = resp.ok ? await resp.json() : sessionData;
       const overlay = document.createElement('div');
       overlay.className = 'generic-modal-overlay';
+      const statusColor = s.status === 'completed' ? '#10a37f' : s.status === 'running' ? '#a8c7fa' : s.status === 'failed' ? '#ef4444' : '#8e8e8e';
       overlay.innerHTML = `
-        <div class="generic-modal" style="max-width:700px;max-height:80vh;overflow-y:auto;">
-          <div class="generic-modal-title">${escapeHtml(s.title || s.id || '会话详情')}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
-            ${s.status || ''} · ${s.model || ''} · ${s.id || sessionId}
+        <div class="generic-modal" style="max-width:780px;max-height:85vh;display:flex;flex-direction:column;">
+          <div class="generic-modal-title" style="flex-shrink:0;">${escapeHtml(s.title || s.id || '会话详情')}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;flex-shrink:0;">
+            <span style="color:${statusColor};">● ${s.status || ''}</span> · ${s.model || ''} · ${s.id || sessionId}
           </div>
-          ${s.user_message ? `<div style="margin-bottom:12px;"><b>任务:</b><br>${escapeHtml(s.user_message)}</div>` : ''}
-          ${s.assistant_result ? `<div style="margin-bottom:12px;"><b>结果:</b><br><div style="white-space:pre-wrap;">${escapeHtml(s.assistant_result)}</div></div>` : ''}
-          <div class="generic-modal-actions">
+          <div id="sessionMsgs" style="flex:1; overflow-y:auto; margin-bottom:12px; padding:8px; background:rgba(255,255,255,0.02); border-radius:6px; min-height:200px; max-height:50vh;">
+            ${s.user_message ? `<div style="margin-bottom:10px;"><b style="color:var(--text-muted);">任务:</b><br><div style="white-space:pre-wrap;">${escapeHtml(s.user_message)}</div></div>` : ''}
+            ${s.assistant_result ? `<div><b style="color:var(--text-muted);">结果:</b><br><div style="white-space:pre-wrap;">${escapeHtml(s.assistant_result)}</div></div>` : ''}
+            ${(!s.user_message && !s.assistant_result) ? '<div style="color:var(--text-muted);">（无消息）</div>' : ''}
+          </div>
+          <div style="flex-shrink:0; display:flex; gap:8px; align-items:flex-end;">
+            <textarea id="sessionFollowUpInput" placeholder="继续和 AI 交流..." style="flex:1; min-height:60px; max-height:120px; padding:8px; border-radius:6px; background:var(--bg-elevated); border:1px solid var(--border-subtle); color:var(--text-primary); font-size:13px; resize:vertical;"></textarea>
+            <button class="today-btn primary" id="sessionSendBtn" style="flex-shrink:0;">发送</button>
+          </div>
+          <div class="generic-modal-actions" style="flex-shrink:0; margin-top:10px;">
             <button class="today-btn" id="closeSessionDetail">关闭</button>
+            <button class="today-btn" id="refreshSessionDetail" style="margin-left:8px;">刷新</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
       overlay.querySelector('#closeSessionDetail').addEventListener('click', () => overlay.remove());
       overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+      // Refresh button
+      overlay.querySelector('#refreshSessionDetail').addEventListener('click', () => {
+        overlay.remove();
+        openSessionDetail(sessionId);
+      });
+
+      // Send follow-up message
+      const sendBtn = overlay.querySelector('#sessionSendBtn');
+      const inputEl = overlay.querySelector('#sessionFollowUpInput');
+      const msgsEl = overlay.querySelector('#sessionMsgs');
+
+      const sendFollowUp = async () => {
+        const message = inputEl.value.trim();
+        if (!message) return;
+        sendBtn.disabled = true;
+        sendBtn.textContent = '发送中...';
+        // Append user message immediately
+        const userDiv = document.createElement('div');
+        userDiv.style.cssText = 'margin-bottom:10px;';
+        userDiv.innerHTML = `<b style="color:var(--text-muted);">你:</b><br><div style="white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+        msgsEl.appendChild(userDiv);
+        inputEl.value = '';
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        try {
+          const r = await fetch(`/api/sessions/${sessionId}/send`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ message }),
+          });
+          const data = await r.json();
+          const aiDiv = document.createElement('div');
+          aiDiv.style.cssText = 'margin-bottom:10px;';
+          const aiText = data.assistant_result || data.result || data.error || '(无回复)';
+          aiDiv.innerHTML = `<b style="color:var(--text-muted);">AI:</b><br><div style="white-space:pre-wrap;">${escapeHtml(aiText)}</div>`;
+          msgsEl.appendChild(aiDiv);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+        } catch (e) {
+          toast('发送失败: ' + e.message, 'error');
+        } finally {
+          sendBtn.disabled = false;
+          sendBtn.textContent = '发送';
+        }
+      };
+      sendBtn.addEventListener('click', sendFollowUp);
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          sendFollowUp();
+        }
+      });
     } catch (e) {
       toast('加载会话详情失败: ' + e, 'error');
     }
@@ -3686,8 +3746,13 @@
             <span style="font-size:11px; padding:2px 8px; border-radius:4px; background:rgba(255,255,255,0.06); color:${statusColor};">${r.status}</span>
           </div>
           <div class="skill-item-desc" style="font-size:12px; color:var(--text-muted);">
-            ${started} · 任务: ${escapeHtml(r.job_id)}
+            ${started} · 任务: ${escapeHtml(r.job_id)} ${r.session_id ? '· <span style="color:var(--text-secondary);">点击查看会话</span>' : ''}
           </div>`;
+        // Make clickable to open the session detail
+        if (r.session_id) {
+          item.style.cursor = 'pointer';
+          item.addEventListener('click', () => openSessionDetail(r.session_id));
+        }
         el.cronRunsList.appendChild(item);
       }
     } catch (e) {
