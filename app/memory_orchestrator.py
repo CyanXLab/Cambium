@@ -983,15 +983,19 @@ async def run_reflection(db_path: Path, *, user_id: str = "default",
         except json.JSONDecodeError as e:
             return {"success": False, "error": f"invalid JSON: {e}"}
 
-        # Save reflection
-        reflection = save_reflection(
-            db_path, user_id=user_id, trigger="periodic",
-            summary=result.get("summary", ""),
-            insights="\n".join(result.get("insights", [])),
-            profile_updates=result.get("profile_updates", {}),
-            new_memories=result.get("new_memories", []),
-            message_count=message_count,
-        )
+        # Save reflection — safely handle non-standard LLM responses
+        try:
+            reflection = save_reflection(
+                db_path, user_id=user_id, trigger="periodic",
+                summary=str(result.get("summary", "")),
+                insights="\n".join(str(i) for i in (result.get("insights", []) if isinstance(result.get("insights"), list) else [])),
+                profile_updates=result.get("profile_updates", {}) if isinstance(result.get("profile_updates"), dict) else {},
+                new_memories=result.get("new_memories", []) if isinstance(result.get("new_memories"), list) else [],
+                message_count=message_count,
+            )
+        except Exception as e:
+            print(f"[reflection] save failed: {e}")
+            reflection = {"id": "error", "summary": str(result.get("summary", ""))}
 
         # Apply profile updates — safely
         if result.get("profile_updates"):

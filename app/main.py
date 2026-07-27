@@ -4432,78 +4432,66 @@ def mcp_servers_save(servers: List[Dict]):
 
 
 async def mcp_test_server(name: str, command_or_url: str, env: Dict) -> Dict:
-    """Test MCP server connection. Supports:
-    - stdio: 'npx -y open-websearch@latest' (spawns subprocess)
-    - HTTP/SSE: 'http://example.com/sse' or 'http://example.com/mcp' (remote server)
-    Remote servers are fully supported — no local command needed.
-    """
+    """Test MCP server. For remote: only need URL + name."""
     try:
         from mcp import ClientSession
     except ImportError:
-        return {"name": name, "command": command_or_url, "connected": False, "error": "mcp python sdk not installed (pip install mcp)"}
+        return {"name": name, "command": command_or_url, "connected": False, "error": "pip install mcp"}
 
     is_http = command_or_url.startswith("http://") or command_or_url.startswith("https://")
 
     if is_http:
         url = command_or_url.rstrip("/")
-        # Try SSE first (most common for remote), then streamable HTTP
+        # Try SSE, then HTTP
         for transport in ["sse", "http"]:
             try:
                 if transport == "sse":
                     from mcp.client.sse import sse_client
-                    sse_url = url if "/sse" in url else (url + "/sse" if not url.endswith("/sse") else url)
-                    async with sse_client(sse_url) as streams:
-                        read, write = streams[0], streams[1]
+                    sse_url = url if "/sse" in url else url + "/sse"
+                    async with sse_client(sse_url) as (read, write):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
                             tools_resp = await session.list_tools()
-                            tool_names = [t.name for t in tools_resp.tools]
-                            return {"name": name, "command": command_or_url, "env": env, "connected": True, "tools": tool_names, "transport": "sse"}
+                            return {"name": name, "command": command_or_url, "connected": True,
+                                    "tools": [t.name for t in tools_resp.tools], "transport": "sse"}
                 else:
                     from mcp.client.streamable_http import streamablehttp_client
-                    http_url = url if url.endswith("/mcp") else (url.replace("/sse", "") + "/mcp")
-                    async with streamablehttp_client(http_url) as streams:
-                        read, write = streams[0], streams[1]
+                    http_url = url.replace("/sse", "") + "/mcp" if "/sse" in url else (url if url.endswith("/mcp") else url + "/mcp")
+                    async with streamablehttp_client(http_url) as (read, write, *_):
                         async with ClientSession(read, write) as session:
                             await session.initialize()
                             tools_resp = await session.list_tools()
-                            tool_names = [t.name for t in tools_resp.tools]
-                            return {"name": name, "command": command_or_url, "env": env, "connected": True, "tools": tool_names, "transport": "http"}
+                            return {"name": name, "command": command_or_url, "connected": True,
+                                    "tools": [t.name for t in tools_resp.tools], "transport": "http"}
             except Exception:
                 continue
         return {"name": name, "command": command_or_url, "connected": False, "error": "SSE and HTTP both failed"}
     else:
-        # stdio transport — spawn subprocess
         try:
             from mcp import StdioServerParameters
             from mcp.client.stdio import stdio_client
         except ImportError:
-            return {"name": name, "command": command_or_url, "connected": False, "error": "mcp sdk not installed (pip install mcp)"}
+            return {"name": name, "command": command_or_url, "connected": False, "error": "pip install mcp"}
         import shlex
         parts = shlex.split(command_or_url)
         if not parts:
             return {"name": name, "command": command_or_url, "connected": False, "error": "empty command"}
-        cmd = parts[0]
-        args = parts[1:]
         full_env = {**os.environ, **env}
         try:
-            params = StdioServerParameters(command=cmd, args=args, env=full_env)
-            async with stdio_client(params) as streams:
-                read, write = streams[0], streams[1]
+            params = StdioServerParameters(command=parts[0], args=parts[1:], env=full_env)
+            async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     tools_resp = await session.list_tools()
-                    tool_names = [t.name for t in tools_resp.tools]
-                    return {"name": name, "command": command_or_url, "env": env, "connected": True, "tools": tool_names, "transport": "stdio"}
-        except asyncio.TimeoutError:
-            return {"name": name, "command": command_or_url, "connected": False, "error": "timeout (server didn't respond in 30s)"}
+                    return {"name": name, "command": command_or_url, "connected": True,
+                            "tools": [t.name for t in tools_resp.tools], "transport": "stdio"}
         except Exception as e:
             return {"name": name, "command": command_or_url, "connected": False, "error": str(e)[:200]}
 
 
 async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict, timeout_sec: float = 60.0) -> Dict:
     """Call an MCP tool. Supports stdio and HTTP/SSE transports.
-    Remote servers (http:// or https://) are fully supported — no command needed."""
+    For remote servers, only need URL + name — no command needed."""
     servers = mcp_servers_load()
     srv = next((s for s in servers if s["name"] == server_name), None)
     if not srv:
@@ -4521,44 +4509,30 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict, timeo
     if is_http:
         url = command_or_url.rstrip("/")
         try:
-            # Try SSE first (most common for remote servers)
-            if "/sse" in url or not url.endswith("/mcp"):
-                try:
-                    from mcp.client.sse import sse_client
-                    sse_url = url if "/sse" in url else (url + "/sse" if not url.endswith("/sse") else url)
-                    async with sse_client(sse_url) as streams:
-                        # sse_client returns 2-tuple (read, write) in most versions
-                        read, write = streams[0], streams[1]
-                        async with ClientSession(read, write) as session:
-                            await session.initialize()
-                            result = await asyncio.wait_for(session.call_tool(tool_name, arguments), timeout=timeout_sec)
-                except Exception as sse_err:
-                    # Try streamable HTTP as fallback
-                    try:
-                        from mcp.client.streamable_http import streamablehttp_client
-                        http_url = url if url.endswith("/mcp") else (url.rstrip("/sse") + "/mcp")
-                        async with streamablehttp_client(http_url) as streams:
-                            # streamablehttp_client may return 2 or 3 tuple
-                            read, write = streams[0], streams[1]
-                            async with ClientSession(read, write) as session:
-                                await session.initialize()
-                                result = await asyncio.wait_for(session.call_tool(tool_name, arguments), timeout=timeout_sec)
-                    except Exception as http_err:
-                        return {"success": False, "error": f"SSE failed: {sse_err}; HTTP failed: {http_err}"}
-            else:
-                # URL ends with /mcp — use streamable HTTP
-                from mcp.client.streamable_http import streamablehttp_client
-                async with streamablehttp_client(url) as streams:
-                    read, write = streams[0], streams[1]
+            # Try SSE first
+            try:
+                from mcp.client.sse import sse_client
+                sse_url = url if "/sse" in url else url + "/sse"
+                async with sse_client(sse_url) as (read, write):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         result = await asyncio.wait_for(session.call_tool(tool_name, arguments), timeout=timeout_sec)
+            except Exception as sse_err:
+                # Try streamable HTTP
+                try:
+                    from mcp.client.streamable_http import streamablehttp_client
+                    http_url = url.replace("/sse", "") + "/mcp" if "/sse" in url else (url if url.endswith("/mcp") else url + "/mcp")
+                    async with streamablehttp_client(http_url) as (read, write, *_):
+                        async with ClientSession(read, write) as session:
+                            await session.initialize()
+                            result = await asyncio.wait_for(session.call_tool(tool_name, arguments), timeout=timeout_sec)
+                except Exception as http_err:
+                    return {"success": False, "error": f"SSE: {sse_err}; HTTP: {http_err}"}
         except asyncio.TimeoutError:
-            return {"success": False, "error": f"MCP timed out ({timeout_sec}s)"}
+            return {"success": False, "error": f"timeout ({timeout_sec}s)"}
         except Exception as e:
             return {"success": False, "error": str(e)[:500]}
     else:
-        # stdio mode — requires local command
         try:
             from mcp import StdioServerParameters
             from mcp.client.stdio import stdio_client
@@ -4571,20 +4545,18 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict, timeo
         full_env = {**os.environ, **env}
         try:
             params = StdioServerParameters(command=parts[0], args=parts[1:], env=full_env)
-            async with stdio_client(params) as streams:
-                read, write = streams[0], streams[1]
+            async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     result = await asyncio.wait_for(session.call_tool(tool_name, arguments), timeout=timeout_sec)
         except asyncio.TimeoutError:
-            return {"success": False, "error": f"MCP timed out ({timeout_sec}s)"}
+            return {"success": False, "error": f"timeout ({timeout_sec}s)"}
         except Exception as e:
             return {"success": False, "error": str(e)[:500]}
 
     if result is None:
-        return {"success": False, "error": "no result from MCP server"}
+        return {"success": False, "error": "no result"}
 
-    # Extract text content
     try:
         text_parts = []
         content = result.content if hasattr(result, "content") else (result.get("content", []) if isinstance(result, dict) else [])
@@ -4593,15 +4565,13 @@ async def mcp_call_tool(server_name: str, tool_name: str, arguments: Dict, timeo
                 text_parts.append(block.text)
             elif isinstance(block, dict) and "text" in block:
                 text_parts.append(block["text"])
-            elif hasattr(block, "data"):
-                text_parts.append("[binary data]")
         text = "\n".join(text_parts) or "(no output)"
         is_error = result.isError if hasattr(result, "isError") else False
         if is_error:
-            return {"success": False, "error": text[:2000], "result": text[:2000]}
+            return {"success": False, "error": text[:2000]}
         return {"success": True, "result": text[:4000]}
     except Exception as e:
-        return {"success": False, "error": f"result parse failed: {e}"}
+        return {"success": False, "error": f"parse failed: {e}"}
 
 
 @app.get("/api/mcp/servers")
