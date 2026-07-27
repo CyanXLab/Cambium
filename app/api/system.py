@@ -168,6 +168,101 @@ async def webllm_query(req: WebLLMEmbedQuery):
 
 
 # ============================================================
+# Vision / Image Description (VLM)
+# ============================================================
+
+class VisionDescribeRequest(BaseModel):
+    """Request to describe an image using a Vision Language Model."""
+    data_url: str  # data:image/...;base64,...
+    name: str = ""
+    prompt: str = ""  # Optional custom prompt
+
+
+@router.post("/vision/describe")
+async def vision_describe(req: VisionDescribeRequest):
+    """Describe an image using a Vision Language Model (VLM).
+
+    This endpoint receives a base64-encoded image (as a data URL),
+    sends it to a VLM (e.g., Qwen2.5-VL), and returns a text description.
+    The description is then passed to the main LLM as part of the user message.
+
+    The VLM model is configured via settings:
+      - model_slot_3 = "Qwen/Qwen2.5-VL-72B-Instruct" (or any VL model)
+      - Or use a dedicated vision_api_key/base_url/model in settings
+
+    Falls back to the main API config if no VLM-specific config is set.
+    """
+    if not req.data_url:
+        raise HTTPException(status_code=400, detail="data_url required")
+
+    # Get VLM config: try vision-specific settings, fall back to main config
+    from app.main import get_api_config, settings_get_all, DB_PATH
+    s = settings_get_all()
+    api_cfg = {
+        "api_key": s.get("vision_api_key") or "",
+        "api_base_url": s.get("vision_api_base_url") or "",
+        "api_model": s.get("vision_api_model") or "",
+    }
+    # Fall back to main config
+    if not api_cfg["api_key"]:
+        main = get_api_config()
+        api_cfg = main
+    # Fall back to model_slot_3 (Qwen2.5-VL by default)
+    if not api_cfg["api_model"] or "VL" not in api_cfg["api_model"].upper():
+        vlm_model = s.get("model_slot_3", "")
+        if vlm_model:
+            api_cfg["api_model"] = vlm_model
+
+    if not api_cfg.get("api_key"):
+        raise HTTPException(status_code=503, detail="No API key configured for vision model")
+
+    import httpx
+    prompt = req.prompt or "请详细描述这张图片的内容，包括场景、物体、文字、人物、颜色等关键信息。用中文回答。"
+
+    payload = {
+        "model": api_cfg["api_model"],
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": req.data_url}},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 800,
+        "stream": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"{api_cfg['api_base_url'].rstrip('/')}/chat/completions",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            description = data["choices"][0]["message"]["content"]
+            return {
+                "description": description,
+                "model": api_cfg["api_model"],
+                "name": req.name,
+            }
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"VLM API error: {exc.response.status_code} {exc.response.text[:500]}"
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"VLM call failed: {exc}")
+
+
+# ============================================================
 # Migrations
 # ============================================================
 

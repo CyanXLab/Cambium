@@ -135,9 +135,12 @@ from app import vector_indexer
 from app import autogen_integration
 
 # ===== Configuration =====
-MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "")
+# ModelScope defaults — user provided credentials, can be overridden via settings UI
+MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
 MODELSCOPE_BASE_URL = os.getenv("MODELSCOPE_BASE_URL", "https://api-inference.modelscope.cn/v1")
-MODELSCOPE_MODEL = os.getenv("MODELSCOPE_MODEL", "")
+# Use a real Qwen3 model that exists on ModelScope
+# Qwen3-235B-A22B-Instruct-2507 is the latest flagship (July 2025)
+MODELSCOPE_MODEL = os.getenv("MODELSCOPE_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507")
 
 BASE_DIR = Path(__file__).resolve().parent  # app/
 PROJECT_ROOT = BASE_DIR.parent  # project root (Cambium/)
@@ -856,9 +859,9 @@ DEFAULT_SETTINGS = {
     "api_base_url": "",
     "api_model": "",
     # Multi-model slots (5 slots, empty = not shown in dropdown)
-    "model_slot_1": "",
-    "model_slot_2": "",
-    "model_slot_3": "",
+    "model_slot_1": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "model_slot_2": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "model_slot_3": "Qwen/Qwen2.5-VL-72B-Instruct",
     "model_slot_4": "",
     "model_slot_5": "",
     "selected_model": "",
@@ -886,6 +889,10 @@ DEFAULT_SETTINGS = {
     "rag_embedding_api_key": "",
     "rag_embedding_api_base_url": "",
     "rag_embedding_model": "",
+    # Vision API (VLM for image recognition; falls back to main API + model_slot_3)
+    "vision_api_key": "",
+    "vision_api_base_url": "",
+    "vision_api_model": "",
     "subtask_api_key": "",
     "subtask_api_base_url": "",
     "subtask_api_model": "",

@@ -1310,6 +1310,7 @@
     let userContent = text;
 
     // For text files, append content inline so the LLM can read it
+    // For images, call VLM to generate a description, then append it
     if (msgAttachments.length > 0) {
       const parsedTexts = [];
       for (const a of msgAttachments) {
@@ -1323,6 +1324,25 @@
             const parsed = await r.json();
             if (parsed.kind === 'text' && parsed.content) {
               parsedTexts.push(`\n\n--- 附件 ${a.name} ---\n${parsed.content}\n--- 附件结束 ---`);
+            } else if (parsed.kind === 'image') {
+              // Image: call VLM to describe it, then append the description
+              try {
+                toast('正在识别图片内容...', 'info');
+                const vlmResp = await fetch('/api/v2/vision/describe', {
+                  method: 'POST',
+                  headers: {'Content-Type':'application/json'},
+                  body: JSON.stringify({ data_url: parsed.data_url, name: a.name }),
+                });
+                if (vlmResp.ok) {
+                  const vlmData = await vlmResp.json();
+                  if (vlmData.description) {
+                    parsedTexts.push(`\n\n--- 图片 ${a.name} 的内容描述 ---\n${vlmData.description}\n--- 图片描述结束 ---`);
+                  }
+                }
+              } catch (e) {
+                console.warn('VLM describe failed', e);
+                parsedTexts.push(`\n\n--- 图片 ${a.name}（识别失败，请描述这张图片）---\n--- 图片结束 ---`);
+              }
             }
           } catch (e) { console.warn('parse attachment failed', e); }
         }
