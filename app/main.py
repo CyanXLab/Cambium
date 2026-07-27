@@ -159,7 +159,7 @@ SKILLS_ROOT.mkdir(exist_ok=True)
 PLUGINS_ROOT = PROJECT_ROOT / "plugins"
 PLUGINS_ROOT.mkdir(exist_ok=True)
 
-app = FastAPI(title="Cambium", version="2.1.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="Cambium", version="2.2.0", docs_url=None, redoc_url=None)
 
 # Register global exception handlers + request logging middleware
 try:

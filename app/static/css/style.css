@@ -70,10 +70,22 @@ button { font-family: inherit; font-size: inherit; color: inherit; background: n
 textarea, input { font-family: inherit; font-size: inherit; color: inherit; background: transparent; border: none; outline: none; }
 textarea, input, button { line-height: inherit; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+/* Hero UI-style scrollbars: thin, subtle, only visible on hover */
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; transition: background 0.2s; }
+:hover::-webkit-scrollbar-thumb,
+*:hover > ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: rgba(255,255,255,0.15) transparent; }
+
+/* Always-visible scrollbars for specific scrollable areas on hover */
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: transparent; }
+.sidebar-nav:hover::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
 /* ============================================================
    App layout

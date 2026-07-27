@@ -67,8 +67,12 @@ async def vector_store_status():
     Returns:
         sentence_transformers_available: bool
         chromadb_available: bool
-        default_model: configured model name
-        loaded_model: actually loaded model name (empty if none)
+        api_embedding_configured: bool (whether API embedding is enabled)
+        api_embedding_model: str (the model name if API embedding is configured)
+        default_model: configured local model name
+        loaded_model: actually loaded local model name (empty if none)
+        current_backend: the active backend
+        has_real_embeddings: bool
         install_hint: pip command if not fully loaded
     """
     from app.vector_store import get_status, get_vector_store

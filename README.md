@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌱 Cambium v2.1.0
+# 🌱 Cambium v2.2.0
 
 ### 个人 AI 的连续性引擎
 
@@ -39,45 +39,62 @@ Continuity = Identity × Memory × Agency × Shared Experience × Reflection
 
 ---
 
-## v2.1.0 重大更新
+## v2.2.0 重大更新
+
+### 修复前端按钮无反应（关键 bug）
+- ✅ 修复 `app.js` 中 `createHistoryItem` 函数的语法错误（多余的 `});`）
+- ✅ 该 bug 导致整个前端 JS 初始化失败，所有按钮无反应
+- ✅ 修复后所有按钮恢复正常
+
+### API 供应商管理（主 API + 多供应商）
+- ✅ **主 API**（id="main"）：不可删除，但可编辑，负责核心功能（对话/推理/难度高）
+- ✅ **其他供应商**：可添加/删除无数个，每个需要写名字
+- ✅ **功能分配**：每个功能（记忆/认知/反思/晨报等 12 个）可通过下拉框选择供应商
+- ✅ 默认所有功能使用主 API，可改为其他供应商
+- ✅ 新端点 `/api/v2/providers`（8 个端点：CRUD + 模型获取 + 分配管理）
+- ✅ 主对话（chat）强制使用主 API，不在可分配列表中
+
+### API 向量模型支持
+- ✅ 支持 OpenAI 兼容的 `/embeddings` 端点
+- ✅ 优先级：API embedding > sentence-transformers > ChromaDB 默认 > TF-IDF
+- ✅ 在设置页配置 `rag_embedding_provider=api` + key/base_url/model
+- ✅ `/api/v2/vector-store/status` 显示 API embedding 状态
+- ✅ 仪表盘显示"API 向量模型: xxx"或"本地向量模型: xxx"
+
+### 修复认知抽取错误
+- ✅ 修复 `'shift_type, description, significance'` 错误
+- ✅ 重写 `COGNITIVE_EXTRACTION_PROMPT` 提供清晰示例和字段说明
+- ✅ 所有抽取类型增加字符串→字典的容错处理
+- ✅ LLM 返回字符串而非对象时自动转换
+
+### Hero UI 风格滚动条
+- ✅ 侧边栏滚动条：默认透明，悬停显示
+- ✅ 全局滚动条：6px 宽，仅悬停可见
+- ✅ Firefox 兼容：`scrollbar-width: thin` + `scrollbar-color`
+- ✅ 不再使用浏览器原生丑陋滚动条
+
+### 多 Agent 协作改进
+- ✅ Swarm Task 支持三种引擎：native / LangGraph / AutoGen
+- ✅ 居民系统：7 个独立居民，可单独回答或多居民讨论
+- ✅ 居民自主决定：根据消息内容自动选择是否需要讨论
+- ✅ 关键词触发讨论：「讨论/对比/权衡/debate/compare」
+
+### 测试通过
+- ✅ 185 个测试全部通过（无回归）
+
+---
+
+## v2.1.0 更新（前一版本）
 
 ### 真实向量模型加载
 - ✅ **sentence-transformers 集成**（`paraphrase-multilingual-MiniLM-L12-v2`，384维中英文双语）
 - ✅ ChromaDB + sentence-transformers 双重后端，TF-IDF 仅作最后回退
 - ✅ 新端点 `/api/v2/vector-store/status` 显示当前加载的向量模型
 - ✅ 仪表盘显示向量模型状态（绿色=已加载真实模型，黄色=回退模式）
-- ✅ `app/tools_ext.py::embed_text` 重定向到 `vector_store.embed_text`
 
 ### 模块化路由（main.py 拆分开始）
-- ✅ 新增 `app/api/` 目录，包含 3 个模块化路由：
-  - `app/api/system.py` — health/version/vector-store/config/debug/migrations
-  - `app/api/governance.py` — SSGM 记忆治理（quarantine/validate/promote/audit）
-  - `app/api/agent_v2.py` — Agent Loop v2 + capabilities
-- ✅ 20 个新 v2 端点，全部带 OpenAPI tags
-- ✅ main.py 中的重复 v2 端点已删除，改为 router 注册
-- ✅ 渐进式迁移路径：新端点放 `app/api/`，旧端点保留直到迁移完成
-
-### 移除 Docker 依赖
-- ❌ 删除 `Dockerfile`、`docker-compose.yml`
-- ✅ CI 不再构建 Docker 镜像
-- ✅ 项目聚焦本地个人使用（用户明确不需要 Docker）
-
-### 移除 .env 依赖
-- ✅ 所有 API 配置走前端设置页 UI（存储在 SQLite `settings` 表）
-- ✅ `.env.example` 仅保留可选的日志和 embedding 模型配置
-- ✅ 脚本不再依赖 .env 文件，配置全部在数据库
-
-### 用知名库替换自造轮子
-- ✅ `sentence-transformers`（替换自造 TF-IDF LocalEmbedder）
-- ✅ `chromadb`（向量存储标准库）
-- ✅ `pydantic-settings`（配置管理标准库）
-- ✅ `structlog` 风格的结构化日志（自实现，兼容 stdlib logging）
-- ✅ `httpx`（HTTP 客户端标准库，已使用）
-
-### 测试增强（176 → 185，+9）
-- ✅ v2 系统端点测试（health/version/vector-store-status/config）
-- ✅ v2 治理端点测试（stats/audit/quarantine/auto-validate）
-- ✅ Agent capabilities 端点测试
+- ✅ 新增 `app/api/` 目录，包含 4 个模块化路由
+- ✅ 28 个新 v2 端点，全部带 OpenAPI tags
 
 ---
 

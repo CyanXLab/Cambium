@@ -1071,46 +1071,48 @@ COGNITIVE_EXTRACTION_PROMPT_DEFAULT = """你是 Cambium 的认知内核。从最
 {conversation}
 
 【任务】
-从对话中提取以下认知更新（只输出有变化的字段，没有则对应空数组或空对象）：
+从对话中提取以下认知更新（只输出有变化的字段，没有则对应空数组）。
+每个条目必须是一个 JSON 对象（不要输出字符串），只包含该类别声明的字段。
 
 1. identity_shifts: 身份演化事件（如"第一次参与架构决策"、"开始主动提出反对意见"）
-   [{{shift_type, description, significance}}]
+   字段: shift_type (str), description (str), significance (int 0-100)
+   示例: {{"shift_type": "milestone", "description": "第一次主动提出反对意见", "significance": 70}}
+
 2. timeline_events: 值得记入共同时间线的事件（里程碑/决策/冲突/成就）
-   [{{title, occurred_at, category, significance, narrative}}]
+   字段: title (str), occurred_at (str), category (str), significance (int), narrative (str)
+   category 取值: milestone, conflict, creation, growth, absence, reunion, decision, achievement, loss, first, daily
+   示例: {{"title": "完成第一个项目", "occurred_at": "2026-07-27", "category": "achievement", "significance": 80, "narrative": "用户完成了..."}}
+
 3. narratives: 故事性记忆（不是事实，而是有情节的故事）
-   [{{title, story, themes, emotional_resonance}}]
+   字段: title (str), story (str), themes (list of str), emotional_resonance (str)
+   示例: {{"title": "深夜调试", "story": "...", "themes": ["坚持"], "emotional_resonance": "positive"}}
+
 4. growth_insights: 从这次交互中学到的（如"用户不喜欢太多选项"）
-   [{{insight, category, confidence}}]
+   字段: insight (str), category (str), confidence (float 0-1)
+
 5. corrections: 用户纠正了 AI 的地方
-   [{{what_ai_did, what_user_wanted, lesson}}]
+   字段: what_ai_did (str), what_user_wanted (str), lesson (str)
+
 6. world_entities: 用户世界中出现的实体（人/项目/工具/地点）
-   [{{name, entity_type, description}}]
+   字段: name (str), entity_type (str), description (str)
+
 7. world_relations: 实体间关系
-   [{{subject, predicate, obj}}]
+   字段: subject (str), predicate (str), obj (str)
+
 8. long_term_goals: 用户提到的长期目标
-   [{{goal, rationale}}]
+   字段: goal (str), rationale (str)
+
 9. commitments: AI 答应要做的事
-   [{{description, due_date}}]
+   字段: description (str), due_date (str)
+
 10. concepts: 兴趣概念聚类（如从多个具体游戏抽象出"复杂系统模拟"）
-    [{{name, description, member_entities}}]
+    字段: name (str), description (str), member_entities (list of str)
 
-输出 JSON：
-```json
-{{
-  "identity_shifts": [],
-  "timeline_events": [],
-  "narratives": [],
-  "growth_insights": [],
-  "corrections": [],
-  "world_entities": [],
-  "world_relations": [],
-  "long_term_goals": [],
-  "commitments": [],
-  "concepts": []
-}}
-```
+【输出格式】
+只输出一个 JSON 对象，不要其他文字、不要 markdown 代码块标记。格式：
+{{"identity_shifts": [{{...}}], "timeline_events": [{{...}}], "narratives": [], "growth_insights": [], "corrections": [], "world_entities": [], "world_relations": [], "long_term_goals": [], "commitments": [], "concepts": []}}
 
-只输出 JSON。"""
+如果某个类别没有提取到内容，对应空数组 []。"""
 
 
 async def extract_cognitive_updates(db_path: Path, *, user_id: str,
@@ -1171,6 +1173,11 @@ async def extract_cognitive_updates(db_path: Path, *, user_id: str,
                        "world_relations": 0, "long_term_goals": 0, "commitments": 0, "concepts": 0}
 
             for shift in result.get("identity_shifts", []):
+                # Be robust to LLM returning strings instead of dicts
+                if isinstance(shift, str):
+                    if len(shift.strip()) < 5:
+                        continue
+                    shift = {"description": shift.strip()}
                 if isinstance(shift, dict) and shift.get("description"):
                     try:
                         sig_val = shift.get("significance", 50)
@@ -1188,14 +1195,23 @@ async def extract_cognitive_updates(db_path: Path, *, user_id: str,
                         print(f"[cognitive] identity shift add failed: {e}")
 
             for ev in result.get("timeline_events", []):
+                if isinstance(ev, str):
+                    if len(ev.strip()) < 5:
+                        continue
+                    ev = {"title": ev.strip()}
                 if isinstance(ev, dict) and ev.get("title"):
                     try:
+                        sig_raw = ev.get("significance", 50)
+                        try:
+                            sig = int(sig_raw)
+                        except (ValueError, TypeError):
+                            sig = 50
                         add_timeline_event(db_path, user_id=user_id,
                             title=str(ev["title"]),
                             description=str(ev.get("description", "")),
                             occurred_at=str(ev.get("occurred_at", "")),
                             category=str(ev.get("category", "milestone")),
-                            significance=int(ev.get("significance", 50)) if str(ev.get("significance", "50")).isdigit() or str(ev.get("significance", "50")).replace(".","").isdigit() else 50,
+                            significance=sig,
                             narrative=str(ev.get("narrative", "")))
                         applied["timeline_events"] += 1
                     except Exception as e:
@@ -1203,30 +1219,43 @@ async def extract_cognitive_updates(db_path: Path, *, user_id: str,
 
             for n in result.get("narratives", []):
                 if isinstance(n, dict) and n.get("title") and n.get("story"):
-                    add_narrative(db_path, user_id=user_id,
-                        title=n["title"], story=n["story"],
-                        themes=n.get("themes", []),
-                        emotional_resonance=n.get("emotional_resonance", "neutral"),
-                        importance=int(n.get("importance", 50)))
-                    applied["narratives"] += 1
+                    try:
+                        add_narrative(db_path, user_id=user_id,
+                            title=n["title"], story=n["story"],
+                            themes=n.get("themes", []),
+                            emotional_resonance=n.get("emotional_resonance", "neutral"),
+                            importance=int(n.get("importance", 50)))
+                        applied["narratives"] += 1
+                    except Exception as e:
+                        print(f"[cognitive] narrative add failed: {e}")
 
             for gi in result.get("growth_insights", []):
+                if isinstance(gi, str):
+                    if len(gi.strip()) < 5:
+                        continue
+                    gi = {"insight": gi.strip()}
                 if isinstance(gi, dict) and gi.get("insight"):
-                    add_growth_insight(db_path, user_id=user_id,
-                        insight=gi["insight"],
-                        category=gi.get("category", "communication"),
-                        confidence=float(gi.get("confidence", 0.5)),
-                        source="reflection")
-                    applied["growth_insights"] += 1
+                    try:
+                        add_growth_insight(db_path, user_id=user_id,
+                            insight=gi["insight"],
+                            category=gi.get("category", "communication"),
+                            confidence=float(gi.get("confidence", 0.5)),
+                            source="reflection")
+                        applied["growth_insights"] += 1
+                    except Exception as e:
+                        print(f"[cognitive] growth insight add failed: {e}")
 
             for c in result.get("corrections", []):
                 if isinstance(c, dict) and c.get("what_ai_did"):
-                    record_correction(db_path, user_id=user_id,
-                        what_ai_did=c["what_ai_did"],
-                        what_user_wanted=c.get("what_user_wanted", ""),
-                        correction_type=c.get("correction_type", "style"),
-                        lesson=c.get("lesson", ""))
-                    applied["corrections"] += 1
+                    try:
+                        record_correction(db_path, user_id=user_id,
+                            what_ai_did=c["what_ai_did"],
+                            what_user_wanted=c.get("what_user_wanted", ""),
+                            correction_type=c.get("correction_type", "style"),
+                            lesson=c.get("lesson", ""))
+                        applied["corrections"] += 1
+                    except Exception as e:
+                        print(f"[cognitive] correction add failed: {e}")
 
             for we in result.get("world_entities", []):
                 if isinstance(we, dict) and we.get("name"):

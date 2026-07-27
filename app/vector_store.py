@@ -94,17 +94,117 @@ def get_embedding_model() -> Optional[Any]:
     return _embedding_model
 
 
-def embed_text(text: str) -> Optional[List[float]]:
-    """Embed a text using the loaded model. Returns None if unavailable."""
-    model = get_embedding_model()
-    if model is None or not text:
-        return None
+# ============================================================
+# API-based embedding (OpenAI-compatible /embeddings endpoint)
+# ============================================================
+
+# Cached API embedding config (refreshed every 60s)
+_api_embedding_cache: Dict[str, Any] = {"config": None, "expires": 0}
+
+
+def _get_api_embedding_config() -> Optional[Dict[str, str]]:
+    """Get API embedding config from settings (cached for 60s).
+
+    Reads from the SQLite settings table:
+      - rag_embedding_provider: "api" to enable
+      - rag_embedding_api_key
+      - rag_embedding_api_base_url
+      - rag_embedding_model
+    """
+    import time as _time
+    now = _time.time()
+    if _api_embedding_cache["config"] is not None and now < _api_embedding_cache["expires"]:
+        return _api_embedding_cache["config"]
+
     try:
-        vec = model.encode(text[:8000], normalize_embeddings=True)
-        return vec.tolist()
+        from app.config import DB_PATH
+        import sqlite3
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?)",
+            ("rag_embedding_provider", "rag_embedding_api_key",
+             "rag_embedding_api_base_url", "rag_embedding_model")
+        ).fetchall()
+        conn.close()
+        s = {r["key"]: r["value"] for r in rows}
+
+        if s.get("rag_embedding_provider") != "api":
+            _api_embedding_cache["config"] = None
+            _api_embedding_cache["expires"] = now + 60
+            return None
+
+        if not s.get("rag_embedding_api_key") or not s.get("rag_embedding_api_base_url"):
+            _api_embedding_cache["config"] = None
+            _api_embedding_cache["expires"] = now + 60
+            return None
+
+        config = {
+            "api_key": s["rag_embedding_api_key"],
+            "api_base_url": s["rag_embedding_api_base_url"].rstrip("/"),
+            "model": s.get("rag_embedding_model") or "text-embedding-3-small",
+        }
+        _api_embedding_cache["config"] = config
+        _api_embedding_cache["expires"] = now + 60
+        return config
     except Exception as exc:
-        log.warning("vector_store.embed_failed", extra={"error": str(exc)})
+        log.warning("vector_store.api_config_failed", extra={"error": str(exc)})
         return None
+
+
+def _embed_via_api(text: str, config: Dict[str, str]) -> Optional[List[float]]:
+    """Embed text using an OpenAI-compatible /embeddings endpoint."""
+    try:
+        import urllib.request
+        import json as _json
+        url = config["api_base_url"] + "/embeddings"
+        payload = _json.dumps({
+            "model": config["model"],
+            "input": text[:8000],
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+        return data["data"][0]["embedding"]
+    except Exception as exc:
+        log.warning("vector_store.api_embed_failed", extra={
+            "error": str(exc),
+            "model": config.get("model", ""),
+        })
+        return None
+
+
+def embed_text(text: str) -> Optional[List[float]]:
+    """Embed a text using the best available backend.
+
+    Priority:
+      1. API embedding (if rag_embedding_provider=api in settings)
+      2. sentence-transformers (if installed)
+      3. None (caller falls back to TF-IDF)
+    """
+    if not text:
+        return None
+
+    # 1. Try API embedding first
+    api_config = _get_api_embedding_config()
+    if api_config:
+        vec = _embed_via_api(text, api_config)
+        if vec is not None:
+            return vec
+
+    # 2. Try sentence-transformers
+    model = get_embedding_model()
+    if model is not None:
+        try:
+            vec = model.encode(text[:8000], normalize_embeddings=True)
+            return vec.tolist()
+        except Exception as exc:
+            log.warning("vector_store.embed_failed", extra={"error": str(exc)})
+
+    return None
 
 
 def get_vector_store(db_path: Path) -> "VectorStore":
@@ -130,8 +230,12 @@ class VectorStore:
         self.vectors_dir.mkdir(exist_ok=True)
 
         # Auto-detect best backend
+        # Priority: API embedding > sentence-transformers > chromadb-default > tfidf
         self._embedding_model = get_embedding_model()
-        self._has_real_embeddings = self._embedding_model is not None
+        self._api_embedding_config = _get_api_embedding_config()
+        self._has_real_embeddings = (
+            self._embedding_model is not None or self._api_embedding_config is not None
+        )
 
         if CHROMA_AVAILABLE:
             try:
@@ -139,14 +243,19 @@ class VectorStore:
                     path=str(self.vectors_dir),
                     settings=Settings(anonymized_telemetry=False, allow_reset=True),
                 )
-                if self._has_real_embeddings:
+                if self._api_embedding_config:
+                    self._backend = "api-embedding+chromadb"
+                elif self._has_real_embeddings:
                     self._backend = "sentence-transformers+chromadb"
                 else:
                     self._backend = "chromadb-default"
                 self._collections: Dict[str, Any] = {}
                 log.info("vector_store.ready", extra={
                     "backend": self._backend,
-                    "embedding_model": _embedding_model_name if self._has_real_embeddings else "chromadb-default",
+                    "embedding_model": (
+                        f"api:{self._api_embedding_config['model']}" if self._api_embedding_config
+                        else (_embedding_model_name if self._has_real_embeddings else "chromadb-default")
+                    ),
                     "path": str(self.vectors_dir),
                 })
             except Exception as exc:
@@ -477,14 +586,17 @@ class VectorStore:
 
 def get_status() -> Dict:
     """Get the global vector store status (for diagnostics)."""
+    api_config = _get_api_embedding_config()
     return {
         "sentence_transformers_available": ST_AVAILABLE,
         "chromadb_available": CHROMA_AVAILABLE,
+        "api_embedding_configured": api_config is not None,
+        "api_embedding_model": api_config["model"] if api_config else None,
         "default_model": DEFAULT_EMBEDDING_MODEL,
         "loaded_model": _embedding_model_name,
         "install_hint": (
             "pip install sentence-transformers chromadb"
-            if not (ST_AVAILABLE and CHROMA_AVAILABLE)
+            if not (ST_AVAILABLE and CHROMA_AVAILABLE) and not api_config
             else "fully loaded"
         ),
     }
