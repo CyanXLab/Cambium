@@ -1428,3 +1428,139 @@ await event_bus.publish("memory.added", {
 - 消息是临时的
 - 作品（Artifact）是长期的
 - 一年后你不会看聊天记录，你会看你们一起创造了什么
+
+---
+
+## 40. LangGraph 集成 — 多 Agent 状态图
+
+> **触发方式**：Swarm Task 执行时自动使用
+> **工作原理**：用 LangGraph StateGraph 替代手动 for-loop
+
+### 架构
+
+```
+decompose (Planner) → execute (各居民) → review (Critic) → END
+```
+
+每个节点是一个 async 函数，状态在节点间传递：
+- `SwarmState`: task_title, subtasks, results, messages, final_result, status
+
+### API
+
+```
+POST /api/swarm/tasks/{id}/execute-langgraph
+```
+
+如果 LangGraph 不可用，自动回退到原始执行逻辑。
+
+### 多居民讨论
+
+也用 LangGraph 实现：每个居民是一个节点，依次执行，状态在节点间传递。
+
+---
+
+## 41. DSPy 集成 — 签名化 AI 调用
+
+> **触发方式**：自动（如果 DSPy 已安装）
+> **工作原理**：用 DSPy Signature 声明式定义 AI 任务
+
+### 签名
+
+- `MemoryEditSignature` — 记忆编辑
+- `CognitiveExtractionSignature` — 认知提取
+- `ReflectionSignature` — 反思
+- `MorningLetterSignature` — 晨报
+- `ResidentResponseSignature` — 居民回复
+
+### 模块
+
+- `MemoryEditor` — ChainOfThought 记忆编辑
+- `CognitiveExtractor` — ChainOfThought 认知提取
+- `Reflector` — ChainOfThought 反思
+
+### 配置
+
+```python
+from app.dspy_integration import configure_dspy
+configure_dspy(api_base_url="https://api.example.com/v1",
+               api_key="your-key",
+               model="qwen-3.5")
+```
+
+---
+
+## 42. AI 服务器控制
+
+> **触发方式**：AI 通过工具调用
+> **工作原理**：AI 可以完全控制服务器
+
+### 8 个工具
+
+| 工具 | 功能 |
+|------|------|
+| `get_setting` | 读取设置项 |
+| `set_setting` | 修改设置项 |
+| `list_settings` | 列出所有设置 |
+| `db_query` | 只读 SQL (SELECT/PRAGMA) |
+| `db_execute` | 写 SQL (INSERT/UPDATE/DELETE) |
+| `list_tables` | 列出数据库表 |
+| `describe_table` | 查看表结构 |
+| `api_call` | 调用内部 API |
+
+### 使用场景
+
+- AI: "我发现你的 API 延迟设置太高了，我帮你调低" → `set_setting("api_delay", "0")`
+- AI: "让我查看你的记忆库" → `db_query("SELECT * FROM memory_items LIMIT 10")`
+- AI: "让我触发今天的晨报" → `api_call("POST", "/api/mornings/2026-07-27/generate")`
+
+---
+
+## 43. 向量删除同步
+
+删除数据时自动从向量库删除：
+
+- 删除作品 → `vs.delete("artifacts", id=...)`
+- 删除原则 → `vs.delete("philosophy", id=...)`
+- 删除发现 → `vs.delete("discoveries", id=...)`
+- 删除记忆 → `vs.delete("memories_default", id=...)`
+- 删除消息 → `vs.delete("chat_vectors", id=...)`
+
+---
+
+## 44. 历史对话置顶
+
+- 每条对话支持 `pinned` 属性
+- 置顶对话显示在历史面板顶部（📌 置顶 分组）
+- 每条对话有置顶/取消置顶按钮
+
+---
+
+## 45. 设计哲学
+
+### 平台是基建，AI 是灵魂
+
+- 平台提供上下文（记忆/身份/时间线/原则/共同经历）
+- AI 自主决定如何使用
+- 不用代码约束 AI 行为
+- 记忆由 Life Loop 周期性触发，不是每轮
+
+### 记忆触发时机
+
+- 记忆编辑：每 5 轮或 10 分钟触发
+- Profile 更新：每 5 轮触发
+- 元认知自检：每 5 轮触发
+- 认知提取：Life Loop 周期触发
+- 反思：Life Loop 每日触发
+
+### Life Loop 固定时间
+
+- 每天固定 8:00 触发 daily（不是间隔 24 小时）
+- 如果 9:00 才启动，立即触发（因为错过了 8:00）
+- 如果 7:00 启动，等到 8:00 才触发
+
+### 补上逻辑
+
+- 首次运行 → 不补
+- 默认不补（需在设置中开启）
+- 只补当天错过的
+- 当天时段错过不补

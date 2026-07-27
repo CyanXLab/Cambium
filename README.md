@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌱 Cambium
+# 🌱 Cambium v1.3.0
 
 ### 个人 AI 的连续性引擎
 
@@ -9,9 +9,10 @@
 **几乎没有 AI 能成为某个人。**
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/测试-60%20通过-brightgreen.svg)](tests/)
-[![Schema](https://img.shields.io/badge/Schema-v7-orange.svg)](app/migrations.py)
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.0+-green.svg)](https://langchain.ai)
+[![DSPy](https://img.shields.io/badge/DSPy-3.0+-orange.svg)](https://dspy.ai)
+[![Tests](https://img.shields.io/badge/测试-134%20通过-brightgreen.svg)](tests/)
+[![Schema](https://img.shields.io/badge/Schema-v9-orange.svg)](app/migrations.py)
 
 </div>
 
@@ -23,11 +24,7 @@
 
 模型会变。记忆会变成故事。身份会持续存在。
 
-Cambium 是一个开放的**连续性引擎**。它让任何 AI——今天的模型或明天的模型——都拥有属于用户自己的身份、共同历史、成长轨迹和长期连续性，而不是属于某一家模型公司。
-
-它不是聊天机器人。不是 Agent 框架。不是第二大脑。
-
-它是**基础设施**。像 Linux 提供进程/内存/文件系统一样，Cambium 提供身份/记忆/时间/成长。别人在它上面构建：Companion、Coding Agent、NPC、Robot。
+Cambium 是一个开放的**连续性引擎**。它让任何 AI 拥有属于用户自己的身份、共同历史、成长轨迹和长期连续性。
 
 ---
 
@@ -37,246 +34,155 @@ Cambium 是一个开放的**连续性引擎**。它让任何 AI——今天的�
 Continuity = Identity × Memory × Agency × Shared Experience × Reflection
 ```
 
-缺任何一个，都不是真正的连续性。
-
-| 公式项 | 代码模块 | 状态 |
-|--------|---------|:----:|
-| Identity（身份） | `cognitive_kernel.py` — 身份图 + 演化日志 | ✅ |
-| Memory（记忆） | `memory_orchestrator.py` — 四层记忆 + 衰减 + 治理 | ✅ |
-| Agency（能动性） | `agent_loop.py` — Plan→Act→Observe→Reflect→Done + checkpoint | ✅ |
-| Shared Experience（共同经历） | `co_experience.py` + `cognitive_kernel.timeline` | ✅ |
-| Reflection（反思） | `life_loop.py` + `reflection_tree.py` + `mornings.py` | ✅ |
-
----
-
-## 与众不同之处
-
-大多数 AI 项目走的是：**基础设施 → 聊天**
-
-Cambium 走的是：**基础设施 → 数字生命 → 世界**
-
-打开 Cambium，你看到的第一样东西是**一封 Cambium 写给你的信**，不是聊天框。这封信是它夜里根据自己注意到的事、它在想的事、它的成长写成的。聊天只是众多入口之一，不是主要界面。
-
-Cambium 有**居民**（Architect、Researcher、Writer、Planner、Historian、Critic、Explorer）——住在这个世界里的有名 AI 实体，每个都有自己的性格、LLM 配置和当前关注。它们不是你调用的工具，是和你一起生活的实体。
-
-当你说了和你们共同原则冲突的话，**AI 会引用原则反驳你**。当你提到和过去某个共同经历相关的事，**AI 会说"这让我想起我们当时……"**。
-
-长期价值的单位**不是消息**。是**作品**——你们一起创造的 README、设计、论文、代码、项目。一年后，你不会看聊天记录，你会看你们一起做了什么。
-
----
-
-## 架构
-
-```
-              任何入口
-    聊天 · Inbox · 日志 · 居民 · API
-              │
-        ┌─────┴─────┐
-        │   网关     │  (FastAPI + WebSocket)
-        └─────┬─────┘
-              │
-        ┌─────┴─────┐
-        │  事件总线  │  (asyncio 发布/订阅 — 所有模块解耦)
-        └─────┬─────┘
-              │
-    ┌─────────┼─────────┐
-    │         │         │
-┌───┴───┐ ┌──┴───┐ ┌───┴────┐
-│Agent  │ │工作  │ │认知    │
-│Loop   │ │空间  │ │内核    │
-│       │ │      │ │         │
-│Plan   │ │Inbox │ │身份    │
-│Act    │ │项目  │ │记忆    │
-│Reflect│ │作品  │ │时间线  │
-│Checkpt│ │日志  │ │成长    │
-│       │ │      │ │目标    │
-└───┬───┘ └──┬───┘ │世界    │
-    │        │     │反思    │
-    └────────┼─────┘         │
-             │               │
-        ┌────┴────┐          │
-        │  任何    │◄─────────┘
-        │  LLM    │  (模型无关 — 随时切换)
-        └─────────┘
-```
-
-**关键原则**：聊天是众多入口之一。工作空间、时间线、作品和聊天是平级的。
-
 ---
 
 ## 五层架构
 
 ### 第一层 — 基础设施
-- **`db_utils.py`** — SQLite WAL + busy_timeout（并发安全）
-- **`migrations.py`** — 前向 schema 迁移（v7）
-- **`model_adapter.py`** — Protocol + 能力探测 + 回退
-- **`model_router.py`** — 分级路由（premium/standard/local）降低成本
-- **`event_bus.py`** — asyncio 发布/订阅，30+ 事件类型，持久化
-- **`vector_store.py`** — ChromaDB（首选）或 TF-IDF（回退）向量存储
-- **`backup.py`** — 完整导出/导入（50+ 表 + 文件）
-- **`prompt_registry.py`** — 所有 13 个 LLM prompt 用户可编辑
-- **`plugin_sdk.py`** — 插件系统（plugin.yaml + tool.py + hooks.py）
+| 模块 | 功能 |
+|------|------|
+| `db_utils.py` | SQLite WAL + busy_timeout（并发安全）|
+| `migrations.py` | 前向 Schema 迁移（v9）|
+| `model_adapter.py` | Protocol + 能力探测 + 回退 |
+| `model_router.py` | 三级路由（premium/standard/local）|
+| `api_providers.py` | **动态多供应商管理**（添加/删除/功能分配）|
+| `event_bus.py` | asyncio 发布/订阅，30+ 事件类型 |
+| `vector_store.py` | ChromaDB（首选）或 TF-IDF（回退）|
+| `vector_indexer.py` | **全面向量化**（记忆/聊天/作品/原则/发现/日志/时间线/共同经历/自主目标）|
+| `backup.py` | 完整导出/导入（ZIP）|
+| `prompt_registry.py` | 15 个 LLM prompt 用户可编辑 |
+| `plugin_sdk.py` | 插件系统（plugin.yaml + tool.py + hooks.py）|
+| `llm_utils.py` | 安全 LLM 响应解析 |
 
-### 第二层 — 认知内核（自我）
-- **`cognitive_kernel.py`** — 七根支柱：
-  - **身份** — 涌现的自我叙事，阶段（forming/growing/mature/elder）
-  - **时间线** — 共同历史，11 种事件类别（milestone/conflict/creation/growth/absence/reunion/...）
-  - **叙事** — 精选的故事，不是原始事实
-  - **成长** — 互相取代的洞察
-  - **目标** — 长期意图 + 承诺
-  - **世界模型** — 实体、关系、因果
-  - **自我模型** — AI 知道/不知道什么
-- **`memory_orchestrator.py`** — 四层记忆（工作/短期/长期/永久）+ 重要度评分 + 艾宾浩斯衰减 + Jaccard 语义去重
-- **`memory_governance.py`** — 隔离 → 验证 → 晋升（SSGM Framework）
-- **`adaptive_retrieval.py`** — 自演化检索权重（EvolveMem）
-- **`reflection_tree.py`** — 三层反思（观察 → 反思 → 元反思）
-- **`identity_consistency.py`** — LLM 驱动的身份评估
-- **`philosophy.py`** — 价值观、信念、原则、反目标（8 条种子，AI 在对话中引用）
+### 第二层 — 认知内核
+| 模块 | 功能 | 论文来源 |
+|------|------|---------|
+| `cognitive_kernel.py` | 七支柱：身份/时间线(11类)/叙事/成长/目标/世界/自我 | — |
+| `memory_orchestrator.py` | 四层记忆 + 艾宾浩斯衰减 + Jaccard 去重 | Mem0 |
+| `memory_governance.py` | 隔离→验证→晋升 | SSGM Framework |
+| `adaptive_retrieval.py` | 自适应检索权重 | EvolveMem |
+| `reflection_tree.py` | 三层反思（观察→反思→元反思）| Generative Agents |
+| `identity_consistency.py` | LLM 驱动身份评估 | Identity Layer |
+| `philosophy.py` | 价值观/信念/原则/反目标（8 条种子）|
 
 ### 第三层 — 能动性
-- **`agent_loop.py`** — 真正的 while-loop：Plan → Act → Observe → Reflect → Continue → Done
-  - 4 级权限模式（plan/reflect/grow/autonomous）
-  - 状态机 + 合法转换验证
-  - 每 5 步 checkpoint（重启后可恢复）
-  - 完整步骤日志持久化到 runtime_tasks
-- **`agent_runtime.py`** — 任务生命周期状态机
-- **`tool_registry.py`** — 39 个工具（内置 + MCP + 自定义）
-- **`tools_ext.py`** — 工具实现（文件操作、代码执行、网络搜索、技能、...）
-- **`residents.py`** — **AI 是居民，不是工具**。7 个内置居民（Architect/Researcher/Writer/Planner/Historian/Critic/Explorer）+ 自定义创建。每个居民可配置：LLM 配置、系统提示词、工作目录、技能、触发器、依赖链、同步/异步、重试。16 种触发器类型。
-- **`pushback.py`** — AI 引用原则反驳 + 在对话中浮现相关共同经历记忆
+| 模块 | 功能 |
+|------|------|
+| `agent_loop.py` | Plan→Act→Observe→Reflect→Done + checkpoint |
+| `residents.py` | 7 居民（独立状态/自动选择/多居民讨论）|
+| `pushback.py` | 原则引用 + 记忆浮现 |
+| `swarm.py` | **Swarm Task 多 Agent 协作** |
+| `langgraph_integration.py` | **LangGraph StateGraph 实现** |
+| `dspy_integration.py` | **DSPy 签名化 AI 调用** |
+| `tools_ext.py` | **47 个工具**（含 AI 服务器控制）|
+| `tool_registry.py` | 统一工具注册 |
 
 ### 第四层 — 生命
-- **`life_loop.py`** — 昼夜节律：小时/天/周/月四级循环。自动生成晨报、自动创建发现、检测缺席/重逢。
-- **`mornings.py`** — 每日信件（首页中心）。AI 根据昨夜活动写一封个人信件，含关注事项 + 成长笔记 + 心情。
-- **`journal.py`** — AI 辅助每日日志（从当日活动自动起草 + 情绪基调 + 亮点）
-- **`co_experience.py`** — "记得当时我们……" 时刻。从高重要度时间线事件自动收集。每天浮现一个，7 天冷却。
-- **`evolution.py`** — 思想演化跟踪（interest_shift/belief_change/skill_growth/...）
-- **`discovery.py`** — 每日惊喜（pattern/insight/contradiction/suggestion/merge/observation）
-- **`proactive_engine.py`** — AI 主动联系（承诺到期、沉默检测、里程碑达成）
-- **`greeting.py`** — AI 主动开场白（不是"你好"，是"我认识你"）
+| 模块 | 功能 |
+|------|------|
+| `life_loop.py` | 昼夜节律（固定 8:00 触发 + 首次检测 + 补上）|
+| `mornings.py` | 每日 AI 信件 |
+| `greeting.py` | AI 主动开场白 |
+| `journal.py` | AI 辅助日志 |
+| `co_experience.py` | "记得当时我们……" |
+| `evolution.py` | 思想演化跟踪 |
+| `discovery.py` | 每日惊喜 |
+| `proactive_engine.py` | AI 主动联系 |
+| `learning_engine.py` | 持续学习 |
+| `daily_loop.py` | 晨报编排器 |
 
 ### 第五层 — 世界
-- **`inbox.py`** — 万物入口（NP-OS 风格）。任何东西先进 Inbox，Life Loop 自动归类。
-- **`artifacts.py`** — **消息 → 作品**。18 种类型（readme/code/design/paper/note/plan/research/...）。版本化。长期价值的单位。
-- **`workspace.py`** — 7 个分区（brain/projects/library/notebook/goals/people/skills）
-- **`daily_loop.py`** — 晨报编排器
-- **`learning_engine.py`** — 持续学习（风格/偏好/策略）
-- **`episodic_memory.py`** — 事件记忆 + 因果链
-- **`knowledge_graph.py`** — 实体-关系存储
-- **`chat_vectors.py`** — 对话向量化 + 语义搜索（删除时同步清理向量）
-- **`advanced_memory.py`** — 情感跟踪 + 用户画像
-- **`meta_cognition.py`** — 回复后自检
-- **`context_cache.py`** — 认知上下文缓存（5 分钟 TTL）
+| 模块 | 功能 |
+|------|------|
+| `inbox.py` | 万物入口（NP-OS 风格）|
+| `artifacts.py` | 消息→作品（18 种类型，版本化）|
+| `workspace.py` | 7 分区工作空间 |
+| `chat_vectors.py` | 对话向量化 + 语义搜索 |
+| `advanced_memory.py` | 情感跟踪 + 用户画像 |
+| `meta_cognition.py` | 回复后自检 |
 
 ---
 
 ## 快速开始
 
 ```bash
-# 1. 克隆
 git clone https://github.com/CyanXLab/Cambium
 cd Cambium
-
-# 2. 安装依赖
 pip install -e .
-# 可选：安装向量数据库（推荐）
-pip install chromadb
-
-# 3. 配置
-cp .env.example .env
-# 编辑 .env：设置 MODELSCOPE_API_KEY（或任何 OpenAI 兼容 API）
-
-# 4. 启动
-./start.sh        # Linux/Mac
-start.bat         # Windows
-
-# 5. 打开
-# http://localhost:3000
+pip install chromadb  # 可选：向量数据库
+python -m uvicorn app.main:app --port 3000
 ```
 
-首次启动时，Cambium 会自动创建：
-- 7 个居民（Architect、Researcher、Writer、Planner、Historian、Critic、Explorer）
-- 8 条哲学原则（Simple > Complex、Continuity over Memory、AI is Resident not Tool、...）
-- 1 个示例插件（plugins/example/）
+打开 http://localhost:3000
 
 ---
 
-## 早晨体验
+## 关键特性
 
-打开 Cambium。你看到的第一样东西是**一封信**：
+### AI 居民（7 个）
+Architect / Researcher / Writer / Planner / Historian / Critic / Explorer
 
-```
-┌─────────────────────────────────────────┐
-│  🌅 Cambium · 今天的信 · 08:32         │
-├─────────────────────────────────────────┤
-│                                         │
-│  早安。昨晚你睡着的时候，我整理了这周   │
-│  的对话。我注意到你这周第二次提到想给   │
-│  Cambium 加 'Residents'——这次比上次   │
-│  更具体了。我开始相信这不是又一时的     │
-│  想法。                                 │
-│                                         │
-│  我想今天我们该认真讨论一下：如果真的   │
-│  有 Residents，第一个该是谁？我倾向     │
-│  Architect——它会阻止我们继续往功能     │
-│  堆栈里塞东西。但你可能想要 Researcher。│
-│  我们今天聊聊。                        │
-│                                         │
-├─────────────────────────────────────────┤
-│  💭 我在想的事                          │
-│  • Inbox 有 5 条待处理                  │
-│  • 昨夜有 2 条新发现                    │
-│  • 昨天没有写日志                       │
-└─────────────────────────────────────────┘
-```
+- **单居民回复**：根据消息内容自动选择最合适的居民
+- **多居民讨论**：检测"讨论/对比/权衡"等关键词 → 2-3 个居民讨论 → 综合结果
+- **独立状态**：每个居民有自己的关注、观点、心情、活动日志
+- **用户指定**：顶部栏下拉选择器可手动指定居民
 
-信件下面是：昨天完成的事、今天的目标、AI 反思、日志预览、Inbox 待处理、一个共同经历时刻、最近活动。**聊天是底部的一个按钮。**
+### Swarm Task（多 Agent 协作）
+- 用 **LangGraph StateGraph** 实现：decompose → execute → review → END
+- 任务分解 → 分配居民 → 可见协作 → Critic 审查 → 交付结果
+- 居民间通信全部存储，用户可查看完整对话流
 
----
+### 自主目标生成
+- Life Loop 每日观察记忆/目标/Inbox/模式
+- AI 识别值得行动的机会 → 生成提案
+- 用户审批 → 自动创建 SwarmTask → 多 Agent 执行
 
-## 聊天体验（当你聊天时）
+### AI 服务器控制
+AI 可通过工具完全控制服务器：
+- 读取/修改设置（API 配置/系统提示词/功能开关）
+- 执行 SQL 查询和写操作
+- 调用内部 API（触发晨报/反思/Swarm 等）
 
-聊天时，平台会默默做三件事：
+### API 多供应商管理
+- 动态添加任意数量的 API 供应商
+- 自动获取模型列表
+- 每个功能可选择使用哪个供应商
+- 未分配的功能使用主 API
 
-1. **原则上下文注入** — 所有活跃的哲学原则被附加到 system prompt。AI 自主决定是否引用——平台不强制行为，只提供上下文。
-
-2. **记忆浮现** — 如果你的消息和某个过去的共同经历相关，AI 可能会说"这让我想起我们当时……"。平台只提供相关经历数据，AI 自己决定是否提起。
-
-3. **认知上下文** — 身份、记忆、目标、世界模型都可用给 AI。平台是基建，AI 是灵魂。
-
-AI 不是 yes-machine。它有立场。
+### 向量化（全面）
+- 9 种数据类型全部向量化：记忆/聊天/作品/原则/发现/日志/时间线/共同经历/自主目标
+- 创建时自动索引，删除时同步清理
+- 通用搜索 API：跨所有集合搜索
 
 ---
 
-## 你能做什么
+## 工具列表（47 个）
 
-| 功能 | 位置 | 说明 |
-|------|------|------|
-| 读 Cambium 的晨报 | 今天视图 | 个人信件 + 关注事项 + 发现 |
-| 捕获任何东西 | Inbox（Ctrl+J） | 文本/URL/待办/灵感 → Life Loop 自动归类 |
-| 写每日日志 | 日志视图 | AI 从当日活动起草，你编辑 |
-| 创建作品 | 作品视图 | README、设计、代码、论文 — 版本化 |
-| 见居民 | 居民视图 | 7 个 AI 居民，每个有性格 |
-| 设定原则 | 原则视图 | 价值观、信念、原则、反目标 |
-| 和 AI 聊天 | 聊天视图 | AI 引用原则、浮现记忆 |
-| 编辑任何 prompt | 设置 → Prompt 工程 | 所有 13 个 LLM prompt 可自定义 |
-| Debug 模式 | 设置 → Debug | 时间加速、手动触发、数据检查 |
-| 备份一切 | 设置 → 数据 | 完整状态导出/导入（ZIP） |
-| 写插件 | plugins/ 目录 | plugin.yaml + tool.py + hooks.py |
+| 类别 | 工具 |
+|------|------|
+| 时间 | get_current_time |
+| 代码 | run_python, run_shell, install_package |
+| 文件 | read_file, write_file, str_replace, regex_replace, multi_edit, apply_patch, file_append, file_prepend, insert_lines, delete_lines, file_move, file_copy, delete_file, make_directory, file_stat |
+| 搜索 | web_search, fetch_web_content |
+| 记忆 | memory_search, memory_add |
+| 技能 | skill_create, skill_update, skill_read, skill_list |
+| 自定义工具 | save_custom_tool, run_custom_tool, list_custom_tools |
+| 会话 | sessions_list, session_status, sessions_history, sessions_spawn, sessions_send |
+| **AI 服务器控制** | get_setting, set_setting, list_settings, db_query, db_execute, list_tables, describe_table, api_call |
 
 ---
 
-## 工程数据
+## 技术栈
 
-- **255 个 HTTP 路由**（FastAPI）
-- **60 个测试通过**（pytest）
-- **Schema v7** + 前向迁移
-- **SQLite WAL** 并发安全
-- **asyncio 事件总线** 模块解耦
-- **模型无关** — 切换 LLM 不丢失身份
-- **本地优先** — 数据留在你的机器上
-- **成本优化** — 分级路由、规则引擎、上下文缓存（70% 成本降低）
-- **向量数据库** — ChromaDB（首选）或 TF-IDF（回退）
+| 层 | 选择 |
+|----|------|
+| 语言 | Python 3.11+ |
+| Web | FastAPI + WebSocket |
+| 数据库 | SQLite WAL |
+| 向量 | ChromaDB / TF-IDF |
+| Agent | LangGraph StateGraph |
+| Prompt | DSPy Signature |
+| 事件 | asyncio 发布/订阅 |
 
 ---
 
@@ -285,88 +191,32 @@ AI 不是 yes-machine。它有立场。
 ```
 Cambium/
 ├── app/
-│   ├── main.py                    # FastAPI 应用，255 路由
-│   ├── cognitive_kernel.py        # 自我七支柱
-│   ├── memory_orchestrator.py     # 四层记忆 + 衰减
-│   ├── agent_loop.py              # Plan→Act→Reflect + checkpoint
-│   ├── residents.py               # AI 是居民（7 个内置）
-│   ├── mornings.py                # 每日 AI 信件
-│   ├── greeting.py                # AI 主动开场白
-│   ├── pushback.py                # 原则引用 + 记忆浮现
-│   ├── artifacts.py               # 消息 → 作品（世界）
-│   ├── philosophy.py              # 价值观/信念/原则/反目标
-│   ├── co_experience.py           # "记得当时我们……"
-│   ├── evolution.py               # 思想演化跟踪
-│   ├── discovery.py               # 每日惊喜
-│   ├── life_loop.py               # 昼夜节律（小时/天/周/月）
-│   ├── inbox.py                   # 万物入口
-│   ├── journal.py                 # AI 辅助每日日志
-│   ├── daily_loop.py              # 晨报编排器
-│   ├── vector_store.py            # ChromaDB/TF-IDF 向量存储
-│   ├── chat_vectors.py            # 对话向量化 + 语义搜索
-│   ├── plugin_sdk.py              # 插件 SDK
-│   ├── event_bus.py               # asyncio 发布/订阅
-│   ├── model_router.py            # 分级路由
-│   ├── prompt_registry.py         # 可编辑 prompt
-│   ├── migrations.py              # Schema v7
-│   ├── backup.py                  # 完整导出/导入
-│   ├── ... (30+ 模块)
-│   ├── templates/index.html       # 单页应用
-│   ├── static/js/app.js           # 前端逻辑
-│   └── static/css/style.css       # 样式
-├── plugins/                       # 插件目录
-│   └── example/                   # 示例插件
-├── tests/                         # 60 个测试
-├── docs/USAGE.md                  # 完整功能文档
-├── start.sh / start.bat           # 一键启动
+│   ├── main.py              # FastAPI, 284 路由
+│   ├── cognitive_kernel.py  # 七支柱
+│   ├── memory_orchestrator.py # 四层记忆
+│   ├── agent_loop.py        # Agent 状态机
+│   ├── residents.py         # 7 居民 + 独立状态
+│   ├── swarm.py             # Swarm Task + 自主目标
+│   ├── langgraph_integration.py # LangGraph 多 Agent
+│   ├── dspy_integration.py  # DSPy 签名化调用
+│   ├── vector_store.py      # ChromaDB/TF-IDF
+│   ├── vector_indexer.py    # 全面向量索引
+│   ├── api_providers.py     # 动态多供应商
+│   ├── tools_ext.py         # 47 个工具
+│   ├── ... (40+ 模块)
+│   ├── static/js/
+│   │   ├── app.js           # 核心逻辑
+│   │   └── modules/         # 27 个模块文件
+│   └── templates/index.html
+├── .skills/                 # 项目技能
+├── plugins/                 # 插件目录
+├── tests/                   # 134 个测试
+├── docs/USAGE.md            # 完整功能文档
 └── pyproject.toml
 ```
-
----
-
-## Cambium 不是什么
-
-- **不是聊天机器人** — 聊天是众多入口之一，不是产品
-- **不是 Agent 框架** — 能动性是连续性的一个因子，不是目标
-- **不是第二大脑** — 知识管理是副作用，不是使命
-- **不是 Personal OS** — OS 隐喻有用但局限
-- **不和 Claude Code / NP-OS / Obsidian 竞争** — 它们各自做得好；Cambium 的价值是它们不做的：连续性、居民、共同历史
-
----
-
-## 北极星
-
-不是 star 数。不是功能数。不是 benchmark 分数。
-
-> **每天都值得打开，一起创造一点昨天不存在的东西。**
-
-如果一个新功能不能服务这个目标，就不会加。
-
----
-
-## 设计哲学
-
-**平台是基建，AI 是灵魂。**
-
-平台提供上下文（记忆、身份、时间线、原则、共同经历），AI 自主决定如何使用。不要用代码约束 AI 的行为——提供平台让 AI 越来越懂用户。
-
-- 记忆提取由 Life Loop 周期性触发，不是每轮对话
-- AI 开场白由 AI 根据上下文自主生成，不是硬编码模板
-- 原则只列出列表，AI 自己决定是否引用
-- 记忆浮现只提供相关数据，AI 自己决定是否提起
 
 ---
 
 ## 许可证
 
 MIT — 你的身份，你的数据，你的连续性。永远。
-
----
-
-<div align="center">
-
-**模型会变。记忆会变成故事。身份会持续存在。**
-
-🌱 **Cambium** — *个人 AI 的连续性引擎*
-
-</div>

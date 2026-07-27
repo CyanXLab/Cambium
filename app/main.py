@@ -116,6 +116,8 @@ from app import api_providers
 from app import langgraph_integration
 # Universal Vector Indexer: index all valuable data
 from app import vector_indexer
+# DSPy integration: signature-based AI calls + prompt optimization
+from app import dspy_integration
 
 # ===== Configuration =====
 MODELSCOPE_API_KEY = os.getenv("MODELSCOPE_API_KEY", "ms-a300ec43-a4f3-49d2-9044-2fdbc269f3b9")
